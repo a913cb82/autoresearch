@@ -16,9 +16,6 @@ class TestLoop(unittest.TestCase):
         self.work = Path(self.tmp.name) / "work"
         self.conn = db.connect(str(self.work))
         self.nodes = self.work / "nodes"
-        self.template = (
-            Path(__file__).parent.parent / "autoresearch" / "prompts" / "improve.md"
-        ).read_text()
 
     def tearDown(self) -> None:
         self.conn.close()
@@ -54,9 +51,6 @@ class TestLoop(unittest.TestCase):
         with self.assertRaises(ValueError):
             loop.expand_read_paths([str(Path(self.tmp.name) / "*.zz")])
 
-    def test_template_has_read_paths_token(self) -> None:
-        self.assertIn("__READ_PATHS__", self.template)
-
     def test_read_paths_listed_not_pasted(self) -> None:
         approved = Path(self.tmp.name) / "ref.py"
         approved.write_bytes(b"SECRET_BODY")
@@ -71,7 +65,6 @@ class TestLoop(unittest.TestCase):
                 "m",
                 random.Random(0),
                 2,
-                self.template,
                 [str(approved)],
             )
         blobs = [
@@ -79,7 +72,6 @@ class TestLoop(unittest.TestCase):
         ]
         self.assertTrue(any(str(approved).encode() in b for b in blobs))
         self.assertFalse(any(b"SECRET_BODY" in b for b in blobs))
-        self.assertFalse(any(b"__READ_PATHS__" in b for b in blobs))
         conn.close()
 
     def test_tool_argv_with_paths(self) -> None:
@@ -96,7 +88,6 @@ class TestLoop(unittest.TestCase):
                 "m",
                 random.Random(0),
                 1,
-                self.template,
                 [str(approved)],
             )
         conn.close()
@@ -106,22 +97,15 @@ class TestLoop(unittest.TestCase):
         conn = db.connect(str(work))
         with fixture_pi("assert_read"):
             loop.ensure_seed(conn, work, b"x", EVAL)
-            loop.run(conn, work, EVAL, "m", random.Random(0), 1, self.template)
+            loop.run(conn, work, EVAL, "m", random.Random(0), 1)
         conn.close()
-
-    def test_render_keeps_braces_dollars(self) -> None:
-        code = "f('${x}')  # {brace} $dollar"
-        out = loop.render_prompt("A __CURRENT_CODE__ B", {"__CURRENT_CODE__": code})
-        self.assertEqual(out, f"A {code} B")
 
     def _run(self, seed: int, variant: str = "grow", max_rewrites: int = 5):
         work = Path(self.tmp.name) / f"w{seed}"
         conn = db.connect(str(work))
         with fixture_pi(variant):
             loop.ensure_seed(conn, work, b"x", EVAL)
-            loop.run(
-                conn, work, EVAL, "m", random.Random(0), max_rewrites, self.template
-            )
+            loop.run(conn, work, EVAL, "m", random.Random(0), max_rewrites)
         rows = [(r["sha"], r["score"]) for r in db.all_rows(conn)]
         round_ = db.meta_get(conn, "round")
         conn.close()
@@ -154,7 +138,6 @@ class TestLoop(unittest.TestCase):
                     EVAL,
                     "m",
                     random.Random(0),
-                    self.template,
                 )
         self.assertEqual(db.all_rows(self.conn)[0]["claimed"], 0)
 

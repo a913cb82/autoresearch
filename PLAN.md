@@ -65,9 +65,10 @@ parses as float else `RuntimeError`, aborting the run. Nonzero exit ⇒
 stderr ignored except in the error message. EVAL inherits
 `AUTORESEARCH_SEED` (the `--seed` value) from the worker process env;
 use or ignore. Improve:
-render `prompts/improve.md` ("rewrite to score higher"; tokens
-`__CURRENT_CODE__`, `__CURRENT_SCORE__`, `__READ_PATHS__`; long tokens
-so braces/dollars in code can't collide), pipe via stdin to
+call `prompts/improve.render()` (plain-Python template: parent block
+omitted for roots, reference section omitted without `--read-paths`;
+values are never parsed, so braces/dollars in code can't collide),
+pipe via stdin to
 `pi --print` (on PATH) with `--model` verbatim; stdout taken verbatim
 as the new file. No `--read-paths` ⇒ `-nt` (no tools). With paths ⇒
 `-e read_approved.ts` plus `--tools read_approved,read --no-mcp`:

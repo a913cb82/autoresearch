@@ -10,8 +10,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from autoresearch import db, select
-
-TEMPLATE = Path(__file__).parent / "prompts" / "improve.md"
+from autoresearch.prompts.improve import render
 
 
 def run_eval(eval_exe: str, path: Path) -> float:
@@ -27,12 +26,6 @@ def run_eval(eval_exe: str, path: Path) -> float:
             except ValueError:
                 continue
     raise RuntimeError(f"{eval_exe} {path} printed no score")
-
-
-def render_prompt(template: str, mapping: dict[str, str]) -> str:
-    for token, value in mapping.items():
-        template = template.replace(token, value)
-    return template
 
 
 def _dir_files(path: Path) -> list[str]:
@@ -101,7 +94,6 @@ def iterate(
     eval_exe: str,
     model: str,
     rng: random.Random,
-    template: str,
     read_paths: list[str] | None = None,
 ) -> None:
     nodes_dir = workdir / "nodes"
@@ -113,25 +105,19 @@ def iterate(
     try:
         node = next(r for r in rows if int(r["id"]) == node_id)
         current_code = db.node_path(nodes_dir, str(node["sha"])).read_bytes()
-        parent_code, parent_score = current_code, node["score"]
+        parent_code: str | None = None
+        parent_score: str | None = None
         if node["parent"] is not None:
             parent = db.get(conn, int(node["parent"]))
-            parent_code = db.node_path(nodes_dir, str(parent["sha"])).read_bytes()
-            parent_score = parent["score"]
-        best = db.best(conn)
-        assert best is not None
-        best_code = db.node_path(nodes_dir, str(best["sha"])).read_bytes()
-        prompt = render_prompt(
-            template,
-            {
-                "__PARENT_CODE__": parent_code.decode("utf-8"),
-                "__PARENT_SCORE__": _scores(parent_score),
-                "__BEST_CODE__": best_code.decode("utf-8"),
-                "__BEST_SCORE__": str(best["score"]),
-                "__CURRENT_CODE__": current_code.decode("utf-8"),
-                "__CURRENT_SCORE__": str(node["score"]),
-                "__READ_PATHS__": "\n".join(f"- {p}" for p in paths),
-            },
+            blob = db.node_path(nodes_dir, str(parent["sha"])).read_bytes()
+            parent_code = blob.decode("utf-8")
+            parent_score = _scores(parent["score"])
+        prompt = render(
+            parent_code=parent_code,
+            parent_score=parent_score,
+            current_code=current_code.decode("utf-8"),
+            current_score=str(node["score"]),
+            read_paths=paths,
         )
         new_code = improve(prompt, model, paths)
         target, is_new = db.add_node(conn, nodes_dir, node_id, new_code)
@@ -174,11 +160,10 @@ def run(
     model: str,
     rng: random.Random,
     max_rewrites: int,
-    template: str,
     read_paths: list[str] | None = None,
 ) -> None:
     while int(db.meta_get(conn, "round") or 0) < max_rewrites:
-        iterate(conn, workdir, eval_exe, model, rng, template, read_paths)
+        iterate(conn, workdir, eval_exe, model, rng, read_paths)
 
 
 def worker(
@@ -187,7 +172,6 @@ def worker(
     model: str,
     seed: int,
     max_rewrites: int,
-    template: str,
     read_paths: list[str] | None = None,
 ) -> None:
     conn = db.connect(workdir)
@@ -199,7 +183,6 @@ def worker(
             model,
             random.Random(seed),
             max_rewrites,
-            template,
             read_paths,
         )
     finally:

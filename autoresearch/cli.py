@@ -16,10 +16,9 @@ def _worker_main(
     model: str,
     seed: int,
     max_rewrites: int,
-    template: str,
     read_paths: list[str],
 ) -> None:
-    loop.worker(workdir, eval_exe, model, seed, max_rewrites, template, read_paths)
+    loop.worker(workdir, eval_exe, model, seed, max_rewrites, read_paths)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,7 +66,6 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--read-paths matched no files")
     os.environ["AUTORESEARCH_SEED"] = str(args.seed)
     os.environ["AUTORESEARCH_READ_PATHS"] = os.pathsep.join(read_paths)
-    template = loop.TEMPLATE.read_text()
     if args.workers == 1:
         loop.run(
             conn,
@@ -76,7 +74,6 @@ def main(argv: list[str] | None = None) -> int:
             args.model,
             random.Random(args.seed),
             args.max_rewrites,
-            template,
             read_paths,
         )
         return 0
@@ -91,7 +88,6 @@ def main(argv: list[str] | None = None) -> int:
                 args.model,
                 args.seed + i,
                 args.max_rewrites,
-                template,
                 read_paths,
             ),
         )

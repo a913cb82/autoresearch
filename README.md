@@ -16,6 +16,7 @@ pi auth
 - Write executable `EVAL` file; called as `EVAL <filepath>` with `AUTORESEARCH_SEED` in the environment
   - Evaluates the code in `filepath` and outputs a float score to stdout.
 - Write `INITIAL`; first file to be scored by `EVAL`.
+  - Describe the goal of the code in `INITIAL`; the coding agents won't be able to see the `EVAL` script.
 
 ## Usage
 
