@@ -47,6 +47,7 @@ class TestDb(unittest.TestCase):
         db.record_score(self.conn, node_id, 0.5)
         row = db.all_rows(self.conn)[0]
         self.assertEqual(row["score"], 0.5)
+        self.assertEqual(row["round"], 1)
         self.assertEqual(row["claimed"], 1)
         db.release(self.conn, node_id)
         self.assertTrue(db.claim(self.conn, node_id))

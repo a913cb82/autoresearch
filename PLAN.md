@@ -13,7 +13,7 @@ CREATE TABLE nodes(
   parent INTEGER REFERENCES nodes(id), score REAL,
   claimed INTEGER DEFAULT 0);
 CREATE INDEX idx_parent ON nodes(parent);
--- history(round,id,sha,parent,score): written explicitly, no triggers
+-- round on nodes: scoring stamp (state at R = WHERE round<=R)
 -- meta(key,value): round counter (round = evaluation attempts), seed_suffix
 ```
 
@@ -22,9 +22,9 @@ Functions: `add_node(parent, code: bytes) -> (id, is_new)` (tmp+rename +
 stale on ignore), `claim(id) -> bool`
 (`UPDATE … SET claimed=1 WHERE id=? AND claimed=0`, winner reads
 rowcount), `release(id)` (owns clearing; recording never clears),
-`record_score(id, score|None)` (UPDATE nodes + meta bump + INSERT
-history, one txn, in that order), `spend_round()` (bare meta bump for
-dropped duplicates), `get(id)`, `best()` (highest score,
+`record_score(id, score|None)` (stamps score+round on the row + meta
+bump, one txn), `spend_round()` (bare meta bump for dropped
+duplicates), `get(id)`, `best()` (highest score,
 lowest id), `all_rows()`, `state_at(R)`.
 `node_path(nodes_dir, suffix, sha)` (suffix passed by caller).
 Dedup-hit ⇒ skip eval, release, re-pick. Failed evals still bump round

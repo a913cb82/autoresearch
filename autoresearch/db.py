@@ -10,10 +10,8 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS nodes(
   id INTEGER PRIMARY KEY, sha TEXT UNIQUE NOT NULL,
   parent INTEGER REFERENCES nodes(id), score REAL,
-  claimed INTEGER DEFAULT 0);
+  claimed INTEGER DEFAULT 0, round INTEGER);
 CREATE INDEX IF NOT EXISTS idx_parent ON nodes(parent);
-CREATE TABLE IF NOT EXISTS history(
-  round INTEGER, id INTEGER, sha TEXT, parent INTEGER, score REAL);
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
 """
 
@@ -86,18 +84,12 @@ def meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
 
 
 def record_score(conn: sqlite3.Connection, node_id: int, score: "float | None") -> None:
-    conn.execute("UPDATE nodes SET score=? WHERE id=?", (score, node_id))
-    row = conn.execute(
-        "SELECT sha, parent FROM nodes WHERE id=?", (node_id,)
-    ).fetchone()
-    assert row is not None
     round_ = int(meta_get(conn, "round") or 0) + 1
     conn.execute(
-        "INSERT OR REPLACE INTO meta(key, value) VALUES ('round', ?)", (str(round_),)
+        "UPDATE nodes SET score=?, round=? WHERE id=?", (score, round_, node_id)
     )
     conn.execute(
-        "INSERT INTO history(round, id, sha, parent, score) VALUES (?, ?, ?, ?, ?)",
-        (round_, node_id, row["sha"], row["parent"], score),
+        "INSERT OR REPLACE INTO meta(key, value) VALUES ('round', ?)", (str(round_),)
     )
     conn.commit()
 
@@ -129,8 +121,5 @@ def all_rows(conn: sqlite3.Connection) -> "list[sqlite3.Row]":
 
 def state_at(conn: sqlite3.Connection, round_: int) -> "list[sqlite3.Row]":
     return conn.execute(
-        """SELECT h.* FROM history h JOIN (
-             SELECT id, MAX(round) AS m FROM history WHERE round<=? GROUP BY id
-           ) t ON t.id=h.id AND t.m=h.round ORDER BY h.id""",
-        (round_,),
+        "SELECT * FROM nodes WHERE round<=? ORDER BY id", (round_,)
     ).fetchall()
