@@ -2,10 +2,12 @@
 
 Searches code improvements against a user-supplied scoring function.
 
-## Contract
+## Usage
 
-- `evaluate(filepath: str) -> float` — deterministic scorer.
-- A seed file — starting code, tree root.
+`autoresearch --working-dir DIR --starter SEED.py --evaluate EVAL.py`
+
+- `EVAL.py` defines `evaluate(filepath: str) -> float`, deterministic.
+- `SEED.py` is the starting code, tree root.
 
 ## Loop
 
@@ -16,13 +18,6 @@ Serial, until budgets run out:
 3. Score the rewrite; attach as a child.
 
 Best score kept.
-
-## Usage
-
-`autoresearch --working-dir DIR --starter SEED.py --evaluate EVAL.py`
-
-The working dir holds `tree.db` and `nodes/`. This repo holds framework
-only — no run results.
 
 ## Selection
 
