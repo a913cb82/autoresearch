@@ -33,7 +33,7 @@ For node `n` with score `s_n` and children `c_1…k` scoring `s_1…s_k`:
 - `σ₀²` is the variance of all `child − parent` gains.
 - `θ_n ~ N(s_n, σ₀²)`, weight 1 (smallest sample with a mean).
 - `σ²_n ~ InvGamma` around `σ₀²`, weight 2 (smallest sample with a spread).
-- Likelihood: each observed `s_i ~ N(θ_n, σ²_n)`.
+- Likelihood: each observed child score `s_i ~ N(θ_n, σ²_n)`.
 
 **Posterior** (exact):
 - `μ = (s_n + Σs_i)/(1+k)`
