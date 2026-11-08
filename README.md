@@ -54,8 +54,9 @@ Best score kept.
 3. Stop on budget exhaustion. Past scores never compete.
 
 **Behavior:**
-- No children ⇒ broad spread ⇒ keeps upside tail ⇒ outranks exhausted
-  peers (level still set by own score).
+- No children: predictions center on the node's own score, with
+  population-broad spread. Two unexplored nodes rank by score; either
+  can outrank an exhausted node via its tail.
 - Flat children ⇒ pinned mean, collapsed spread ⇒ low rank.
 - Improving child ⇒ high mean, broad spread ⇒ high rank.
 - Several live shots outrank one peak.
