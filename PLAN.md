@@ -81,11 +81,10 @@ seeds, one tree). Same sha scored ⇒ resume. Else insert and score
 (committed before improve) → improve → insert → evaluate → record.
 Orderly failure releases the claim; crashes abandon rows. Budgets read
 from `meta` (shared across processes; overshoot ≤ worker count
-accepted). Best sha+score printed to stdout.
+accepted). Exit when done; best read later via a tiny script (deferred).
 
 Tests (`test_loop.py`, fake eval e.g. byte-length score): 5-round run
-(reaches selection past the 2-gain bootstrap), budgets stop, best
-printed.
+(reaches selection past the 2-gain bootstrap), budgets stop.
 
 ## 6. Smoke
 
@@ -95,4 +94,5 @@ printed, history replays state-at-R. No example game.
 ## Deferred
 
 Diff edits, `--max-time`, `--quiet`, model tiers/flags, split worker
-roles, `--workers` flag, MAD spread, git anything, docs beyond README.
+roles, `--workers` flag, MAD spread, git anything, docs beyond README,
+read-only db inspect script.
