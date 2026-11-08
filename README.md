@@ -11,13 +11,20 @@ Searches code improvements against a user-supplied scoring function.
 
 ## Loop
 
-Serial, until budgets run out:
+Until budgets run out — one worker runs it serially, N run it
+concurrently:
 
-1. Select a node.
+1. Select a node (atomic claim).
 2. Agent rewrites its code to raise the score.
 3. Score the rewrite; attach as a child.
 
 Best score kept.
+
+Workers: N processes run the loop body; only select+claim is
+transactional. Claims take unclaimed or stale rows (`score NULL AND
+claimed < now − stale`, staleness ≈ 2× eval timeout). A worker prefers
+evaluating an existing unscored child over generating new. Orderly
+failure releases the claim; crashes converge via staleness.
 
 ## Selection
 
@@ -61,6 +68,8 @@ sampling, not a setting):
 - Flat children: tight spread samples low every draw ⇒ rarely selected.
 - Improving child: high mean, broad spread ⇒ often selected.
 - Several live shots: more draws per round ⇒ higher max ⇒ selected more.
+- NULL-score rows are invisible to posteriors. Nodes with ≥2 unscored
+descendants are skipped.
 
 **Numbers.** Fixed: weights 1, 2. Learned: `σ₀` global; `μ`, `σ` per node.
 
@@ -87,8 +96,8 @@ CREATE TABLE nodes(
 );
 CREATE INDEX idx_parent ON nodes(parent);
 ```
-- Claim (`UPDATE … WHERE claimed=0`) and dedup (`INSERT OR IGNORE`)
-  are single statements.
+- Claim sets `claimed` to now-epoch: single `UPDATE` taking `claimed=0`
+  or stale rows. Dedup: `INSERT OR IGNORE` on `sha`.
 - `nodes/{sha}<suffix>`: raw code (suffix from seed), tmp+rename writes.
   Seed is row 1.
 - Working dir holds `tree.db` + `nodes/`; this repo holds neither.
