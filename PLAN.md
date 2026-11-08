@@ -75,7 +75,9 @@ parse, fence strip, bytes passthrough.
 ## 5. `loop.py` + `cli.py`
 
 Flags: `--working-dir/--starter/--evaluate/--seed/--max-evals`.
-Step 0: score the seed (fails ⇒ abort). Worker body: select → claim
+Step 0: seed identity check — a scored NULL-parent row with another sha
+⇒ abort (refuse to mix lineages). Same sha scored ⇒ resume (skip).
+Otherwise insert and score (fails ⇒ abort). Worker body: select → claim
 (committed before improve) → improve → insert → evaluate → record.
 Orderly failure releases the claim; crashes abandon rows. Budgets read
 from `meta` (shared across processes; overshoot ≤ worker count
