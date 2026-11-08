@@ -70,11 +70,15 @@ render `prompts/improve.md` ("rewrite to score higher"; tokens
 so braces/dollars in code can't collide), pipe via stdin to
 `pi --print` (on PATH) with `--model` verbatim; stdout taken verbatim
 as the new file. No `--read-paths` ⇒ `-nt` (no tools). With paths ⇒
-`-e read_approved.ts` plus `--tools read_approved --no-mcp`: a static,
-checked-in read-only tool (shipped in the package, found via
-`importlib.resources`) letting the agent read exactly the files in
-`AUTORESEARCH_READ_PATHS` (same env pattern as `AUTORESEARCH_SEED`);
-anything else is denied with model-readable text.
+`-e read_approved.ts` plus `--tools read_approved,read --no-mcp`:
+a static, checked-in gate (shipped in the package, found via
+`importlib.resources`) in front of pi's own `read`. The gate checks
+`realpath` against `AUTORESEARCH_READ_PATHS` (same env pattern as
+`AUTORESEARCH_SEED`) and denials return model-readable text; allowed
+reads delegate via `ctx.executeTool`, so behavior (offset/limit,
+truncation, images) is the built-in's byte for byte. `read` is
+declared but hidden from the model (`prepareLoadout` +
+`reachesTools`), so the gate is the only read path it sees.
 
 Flags: `--working-dir/--initial/--evaluate/--seed/--max-rewrites`
 (`--initial/--evaluate` optional on resume, required fresh).

@@ -77,7 +77,7 @@ def improve(prompt: str, model: str, read_paths: list[str]) -> bytes:
             "-e",
             str(ext),
             "--tools",
-            "read_approved",
+            "read_approved,read",
             "--no-mcp",
             "--model",
             model,

@@ -1,19 +1,28 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { readFile, realpath } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { delimiter, sep } from "node:path";
 import { Type } from "typebox";
+
+type TextBlock = { type: "text"; text: string };
 
 export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "read_approved",
     label: "Read approved file",
-    description: "Read a file approved for this task. Reference only.",
+    description:
+      "Read a file approved for this task. Supports text and images with offset/limit paging. Reference only.",
     promptSnippet: "Read an approved reference file",
     promptGuidelines: [
       "Use read_approved to read reference files. Never read any other path.",
     ],
-    parameters: Type.Object({ path: Type.String() }),
-    async execute(_toolCallId, params) {
+    parameters: Type.Object({
+      path: Type.String(),
+      offset: Type.Optional(Type.Number()),
+      limit: Type.Optional(Type.Number()),
+    }),
+    reachesTools: () => "all",
+    prepareLoadout: () => ({ hiddenDeclarations: ["read"] }),
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const arg = String(params.path ?? "").replace(/^@/, "");
       const roots = (process.env.AUTORESEARCH_READ_PATHS ?? "")
         .split(delimiter)
@@ -30,15 +39,19 @@ export default function (pi: ExtensionAPI) {
           details: {},
         };
       }
-      try {
-        const text = await readFile(real, "utf8");
-        return { content: [{ type: "text", text }], details: {} };
-      } catch {
+      const nested = (await ctx.executeTool(
+        "read",
+        { path: real, offset: params.offset, limit: params.limit },
+        { signal },
+      )) as unknown as { result?: { content?: TextBlock[] }; content?: TextBlock[] };
+      const content = nested.result?.content ?? nested.content;
+      if (!content) {
         return {
-          content: [{ type: "text", text: `Cannot read: ${arg}` }],
+          content: [{ type: "text", text: `Read failed for approved file: ${arg}` }],
           details: {},
         };
       }
+      return { content, details: {} };
     },
   });
 }

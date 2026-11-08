@@ -5,7 +5,8 @@ import sys
 
 a = sys.argv[1:]
 if "--tools" in a:
-    assert "read_approved" in a, a
+    tools = a[a.index("--tools") + 1].split(",")
+    assert set(tools) == {"read_approved", "read"}, a
     assert "--no-mcp" in a, a
     assert "-e" in a, a
     assert "-nt" not in a, a
