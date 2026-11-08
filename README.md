@@ -69,9 +69,24 @@ sampling, not a setting):
 
 **Numbers.** Fixed: weights 1, 2. Learned: `σ₀` global; `μ`, `σ` per node.
 
+## On disk
+
+```
+working-dir/              # --working-dir DIR, per run, not in repo
+├── tree.db               # SQLite WAL: nodes, history, meta tables
+└── nodes/
+    ├── <sha1>.py
+    ├── <sha2>.py
+    └── …
+
+repo (this)               # framework only, no run results
+├── README.md
+└── …                     # loop, selector — to follow
+```
+
 ## Storage
 
-- `tree.db`: SQLite WAL, stdlib only. `score NULL` = unevaluated.
+- `tree.db`: SQLite WAL. `score NULL` = unevaluated.
 
 ```sql
 CREATE TABLE nodes(
