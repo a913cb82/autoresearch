@@ -75,9 +75,9 @@ parse, fence strip, bytes passthrough.
 ## 5. `loop.py` + `cli.py`
 
 Flags: `--working-dir/--starter/--evaluate/--seed/--max-evals`.
-Step 0: if the working dir's scored root differs from `--starter`, abort
-(two seeds, one tree). Same seed scored ⇒ resume. Else insert and
-score (fails ⇒ abort). Worker body: select → claim
+Step 0: checksum `--starter`; if the root row's sha differs, abort (two
+seeds, one tree). Same sha scored ⇒ resume. Else insert and score
+(fails ⇒ abort). Worker body: select → claim
 (committed before improve) → improve → insert → evaluate → record.
 Orderly failure releases the claim; crashes abandon rows. Budgets read
 from `meta` (shared across processes; overshoot ≤ worker count
