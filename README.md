@@ -2,14 +2,27 @@
 
 Searches code improvements against a user-supplied scoring function.
 
+## Setup
+
+Python 3.11+ and `pi` with a logged-in provider:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .
+curl -fsSL https://pi.dev/install.sh | sh  # needs Node.js 22.19+
+pi auth
+```
+
+- Write executable `EVAL` file; called as `EVAL <filepath>` with `AUTORESEARCH_SEED` in the environment
+  - Evaluates the code in `filepath` and outputs a float score to stdout.
+- Write `INITIAL`; first file to be scored by `EVAL`.
+
 ## Usage
 
 ### Run
 ```bash
 autoresearch --working-dir DIR --initial INITIAL --evaluate EVAL --max-rewrites M --model MODEL [--seed N --workers W]
 ```
-- `EVAL`: executable. Called as `EVAL <filepath>` (`AUTORESEARCH_SEED` in the environment); returns the score to stdout.
-- `INITIAL`: starting file.
 - Running in an existing working-dir restores the previous run
   - `--initial` and `--evaluate` must either match or not be specified, budget is from resume point onwards
 
@@ -87,7 +100,3 @@ CREATE TABLE meta(
   key TEXT PRIMARY KEY CHECK(key IN ('round', 'evaluate')),  -- attempt counter
   value TEXT);
 ```
-
-## Status
-
-v0: worker loop, serial or `--workers N`.
