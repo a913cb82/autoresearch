@@ -1,6 +1,6 @@
 # autoresearch
 
-Evolve code against a score. You bring the exam; the loop brings the search.
+Searches code improvements against a user-supplied scoring function.
 
 ## Contract
 
@@ -55,14 +55,11 @@ never the prediction above.
   compete — only a new expansion can score.
 - Stop on budget exhaustion.
 
-In one sentence: sample what each subtree could become, follow the max
-down, expand where fresh beats below.
-
-**Behavior.** No children ⇒ prediction equals prior: unexplored nodes are
-optimistic. Flat children ⇒ mean pins to their level, spread collapses:
-dead nodes deselect themselves. A climbing child ⇒ mean rises, spread
-stays broad: live nodes stay attractive. Many live shots outrank one
-peak.
+**Behavior.** No children ⇒ prediction equals prior, so unexplored nodes
+rank optimistically. Flat children ⇒ mean near their level with small
+spread, so exhausted nodes rank low. An improving child ⇒ high mean with
+broad spread, so improving nodes rank high. A subtree with several
+promising nodes ranks above a single good node.
 
 **Numbers.** Fixed, never tuned: weights 1 and 2. Learned: `σ₀` globally;
 `μ`, `σ` per node. Nothing else.
