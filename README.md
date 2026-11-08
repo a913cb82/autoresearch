@@ -53,12 +53,11 @@ Best score kept.
    samples; else step to the best child.
 3. Stop on budget exhaustion. Past scores never compete.
 
-**Behavior:**
-- No children ⇒ rank by own score, with tails wide enough to beat
-  exhausted nodes.
-- Flat children ⇒ pinned mean, collapsed spread ⇒ low rank.
-- Improving child ⇒ high mean, broad spread ⇒ high rank.
-- Several live shots outrank one peak.
+**Behavior** (selection frequency over rounds; one draw fluctuates):
+- No children: selected by score on average; tails add exploration.
+- Flat children: tight spread samples low every draw ⇒ rarely selected.
+- Improving child: high mean, broad spread ⇒ often selected.
+- Several live shots: more draws per round ⇒ higher max ⇒ selected more.
 
 **Numbers.** Fixed: weights 1, 2. Learned: `σ₀` global; `μ`, `σ` per node.
 
