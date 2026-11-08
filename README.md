@@ -26,19 +26,14 @@ new.
 
 ## Selection
 
-| Symbol | Meaning |
-|---|---|
-| `n` | a node (scored program) |
-| `s_n` | its score |
-| `k`, `s_1…s_k` | child count, child scores |
-| `best` | top score in tree |
-| `σ₀²` | variance of all `child − parent` gains (mutation wobble) |
-| `θ_n`, `σ²_n` | unknown child-mean, child-spread of `n` |
-| `X_n` | predicted next-child score of `n` |
-| `V_n` | best score reachable in `n`'s subtree |
-| `B_n` | best scored node at/below `n` (exact) |
+For node `n` with score `s_n` and children `c_1…k` scoring `s_1…s_k`.
+`best` is the top score in the tree. `σ₀²` is the variance of all
+`child − parent` gains. `θ_n`, `σ²_n` are `n`'s unknown child-mean and
+child-spread. `X_n` predicts its next child's score; `V_n` is the best
+score reachable in its subtree; `B_n` is the best scored node at/below
+it, exact.
 
-**Priors** (direct children only — they alone started from its score):
+**Priors** (direct children):
 - `θ_n ~ N(s_n, σ₀²)`, weight 1 (smallest sample with a mean).
 - `σ²_n ~ InvGamma` around `σ₀²`, weight 2 (smallest sample with a spread).
 - Likelihood: children `~ N(θ_n, σ²_n)`.
@@ -47,12 +42,10 @@ new.
 - `μ = (s_n + Σs_i)/(1+k)`
 - `(2+k)σ² = 2σ₀² + Σ(sᵢ−x̄)² + k(x̄−s_n)²/(1+k)`
 - `X_n ~ Student-t(2+k, μ, σ√(1+1/(1+k)))`
-- t, not Normal: learned spread ⇒ heavy tails when unexplored
-  (optimism), near-Normal when sampled (trust estimates).
 
 **Potential** (bottom-up, leaves first):
 - `V_n = max(B_n, X_n, best child V)`
-- Descendants shape worth here — never the prediction above.
+- Descendants shape `V_n`.
 
 **Decide** (Thompson sampling; one seeded draw per node per round):
 1. Sample every `V_n`: draw each `X_n`, max with `B_n`, child samples.
