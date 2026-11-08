@@ -66,8 +66,6 @@ sampling, not a setting):
 - Flat children: tight spread samples low every draw ⇒ rarely selected.
 - Improving child: high mean, broad spread ⇒ often selected.
 - Several live shots: more draws per round ⇒ higher max ⇒ selected more.
-- NULL-score rows are invisible to posteriors. Nodes with ≥2 unscored
-descendants are skipped.
 
 **Numbers.** Fixed: weights 1, 2. Learned: `σ₀` global; `μ`, `σ` per node.
 
