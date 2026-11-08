@@ -7,6 +7,7 @@ dependencies = []
 
 [project.scripts]
 autoresearch = "autoresearch.cli:main"
+autoresearch-read = "autoresearch.read:main"
 
 [tool.ruff]
 target-version = "py311"

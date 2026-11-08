@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Fixture pi: always returns the same bytes."""
+
+import sys
+
+sys.stdout.write("same")

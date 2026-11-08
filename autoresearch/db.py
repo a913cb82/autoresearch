@@ -102,6 +102,19 @@ def record_score(conn: sqlite3.Connection, node_id: int, score: "float | None") 
     conn.commit()
 
 
+def get(conn: sqlite3.Connection, node_id: int) -> sqlite3.Row:
+    row = conn.execute("SELECT * FROM nodes WHERE id=?", (node_id,)).fetchone()
+    assert row is not None
+    return row
+
+
+def best(conn: sqlite3.Connection) -> "sqlite3.Row | None":
+    return conn.execute(
+        "SELECT * FROM nodes WHERE score IS NOT NULL "
+        "ORDER BY score DESC, id ASC LIMIT 1"
+    ).fetchone()
+
+
 def children(conn: sqlite3.Connection, node_id: int) -> "list[sqlite3.Row]":
     return conn.execute(
         "SELECT * FROM nodes WHERE parent=? ORDER BY id", (node_id,)

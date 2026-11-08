@@ -67,11 +67,13 @@ Flags: `--working-dir/--starter/--evaluate/--seed/--max-evals` plus
 `--model` (forwarded to `pi --print`).
 Step 0: checksum `--starter`; if the root row's sha differs, abort (two
 seeds, one tree). Same sha scored ⇒ resume. Else insert and score
-(fails ⇒ abort). Worker body: select → claim
-(committed before improve) → improve → insert → evaluate → record.
-Orderly failure releases the claim; crashes abandon rows. Budgets read
-from `meta` (shared across processes; overshoot ≤ worker count
-accepted). Exit when done.
+(fails ⇒ abort). Worker body per attempt: select → claim (committed before improve) →
+improve → insert → evaluate → record, `finally` releasing the claim.
+Dedup-hit ⇒ skip eval, mark tried, re-pick (bounded: 10× scored draws;
+exhaustion ⇒ converged exit). Improve failure propagates loudly.
+Crashes abandon rows. Budgets read from `meta` (seed scoring consumes
+budget; shared across processes; overshoot ≤ worker count accepted).
+Exit when done or converged.
 
 `read.py` (`autoresearch-read --working-dir DIR`): prints best path+score.
 Test: fixed db, assert output.
@@ -84,8 +86,9 @@ budgets stop.
 
 ## 4. Smoke
 
-Fake-eval CLI run (byte-length): tree grows, scores recorded, best
-printed, history replays state-at-R. No example game.
+Fake-eval CLI run (byte-length, covered by `test_cli.py`): tree grows,
+scores recorded, `read.py` prints best, history replays state-at-R.
+No example game.
 
 ## Deferred
 

@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Fixture pi: fails."""
+
+import sys
+
+sys.exit(1)
