@@ -51,17 +51,7 @@ Tests (`test_select.py`, fixed tiny trees, hand-computed μ/σ): posterior
 asserted directly, fixed draws injected; cold-start is prior, flat line
 collapses, Tree A → B1, bad-kid root → respawn.
 
-## 3. `evaluate.py`
-
-`run(eval_exe, path) -> float | None`: spawn `EVAL <path>` and wait,
-first non-empty stdout line parses as float else `None`. Nonzero exit
-⇒ `None` (unscored, selector-blind). Timeouts are EVAL's job, not the
-framework's. stderr ignored. ~20 lines.
-
-Tests (`test_evaluate.py`, fixture scripts): exit-0 parse, bad float ⇒
-`None`, nonzero ⇒ `None`, warning lines skipped.
-
-## 4. `improve.py`
+## 3. `improve.py`
 
 `improve(code: bytes, parent_code, best_code) -> bytes`: `urllib` POST
 to `$OPENAI_BASE_URL/chat/completions` (`$OPENAI_API_KEY`,
@@ -72,7 +62,12 @@ with the complete file, nothing else". Parse JSON envelope, take
 Tests (`test_improve.py`, mocked HTTP): prompt contents, envelope
 parse, fence strip, bytes passthrough.
 
-## 5. `loop.py` + `cli.py`
+## 4. `loop.py` + `cli.py`
+
+Eval is a helper here, not a module: `run(eval_exe, path)` spawns
+`EVAL <path>` and waits; first non-empty stdout line parses as float
+else `None`. Nonzero exit ⇒ `None` (unscored, selector-blind).
+Timeouts are EVAL's job. stderr ignored.
 
 Flags: `--working-dir/--starter/--evaluate/--seed/--max-evals`.
 Step 0: checksum `--starter`; if the root row's sha differs, abort (two
@@ -86,10 +81,11 @@ accepted). Exit when done.
 `read.py` (`autoresearch-read --working-dir DIR`): prints best path+score.
 Test: fixed db, assert output.
 
-Tests (`test_loop.py`, fake eval e.g. byte-length score): 5-round run
-(reaches selection past the 2-gain bootstrap), budgets stop.
+Tests (`test_loop.py`, fixture eval scripts + fake eval e.g.
+byte-length score): exit-0 parse, bad float/nonzero ⇒ `None`, 5-round
+run (reaches selection past the 2-gain bootstrap), budgets stop.
 
-## 6. Smoke
+## 5. Smoke
 
 Fake-eval CLI run (byte-length): tree grows, scores recorded, best
 printed, history replays state-at-R. No example game.
