@@ -51,23 +51,15 @@ Tests (`test_select.py`, fixed tiny trees, hand-computed μ/σ): posterior
 asserted directly, fixed draws injected; cold-start is prior, flat line
 collapses, Tree A → B1, bad-kid root → respawn.
 
-## 3. `improve.py`
+## 3. `loop.py` + `cli.py`
 
-`improve(code: bytes, parent_code, best_code) -> bytes`: pipe prompt
-(parent + best + current code, "reply with the complete file, nothing
-else") to `pi --print -nt` via stdin; stdout taken verbatim as the new
-file. No tools, no parsing. Model config is pi's own; `--model` passes
-through verbatim.
-
-Tests (`test_improve.py`, fixture fake-`pi` executable): prompt
-contents, stdout passthrough.
-
-## 4. `loop.py` + `cli.py`
-
-Eval is a helper here, not a module: `run(eval_exe, path)` spawns
-`EVAL <path>` and waits; first non-empty stdout line parses as float
-else `None`. Nonzero exit ⇒ `None` (unscored, selector-blind).
-Timeouts are EVAL's job. stderr ignored.
+Two subprocess helpers live here, not as modules. Eval: `run(eval_exe,
+path)` spawns `EVAL <path>` and waits; first non-empty stdout line
+parses as float else `None`. Nonzero exit ⇒ `None` (unscored,
+selector-blind). Timeouts are EVAL's job. stderr ignored. Improve:
+pipe prompt (parent + best + current code, "reply with the complete
+file, nothing else") to `pi --print -nt` (on PATH) via stdin; stdout
+taken verbatim as the new file. `--model` passes through verbatim.
 
 Flags: `--working-dir/--starter/--evaluate/--seed/--max-evals` plus
 `--model` (forwarded to `pi --print`).
@@ -82,11 +74,12 @@ accepted). Exit when done.
 `read.py` (`autoresearch-read --working-dir DIR`): prints best path+score.
 Test: fixed db, assert output.
 
-Tests (`test_loop.py`, fixture eval scripts + fake eval e.g.
-byte-length score): exit-0 parse, bad float/nonzero ⇒ `None`, 5-round
-run (reaches selection past the 2-gain bootstrap), budgets stop.
+Tests (`test_loop.py`, fixture eval + fake-`pi` scripts, fake eval e.g.
+byte-length score): exit-0 parse, bad float/nonzero ⇒ `None`, prompt
+contents, stdout passthrough, 5-round run (reaches selection past the
+2-gain bootstrap), budgets stop.
 
-## 5. Smoke
+## 4. Smoke
 
 Fake-eval CLI run (byte-length): tree grows, scores recorded, best
 printed, history replays state-at-R. No example game.
