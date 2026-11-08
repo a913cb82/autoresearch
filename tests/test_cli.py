@@ -1,7 +1,7 @@
 import io
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from autoresearch import cli, db, read
@@ -44,16 +44,18 @@ class TestCli(unittest.TestCase):
             self.assertEqual(read.main(["--working-dir", self.work]), 0)
         self.assertIn("4.0", out.getvalue())
 
-    def test_converged_reports(self) -> None:
+    def test_stuck_agent_ends_at_budget(self) -> None:
         args = self.base[: self.base.index("--max-evals") + 1] + [
             "3",
             "--model",
             "m",
         ]
-        err = io.StringIO()
-        with fixture_pi("const"), redirect_stderr(err):
+        with fixture_pi("const"):
             self.assertEqual(cli.main(args), 0)
-        self.assertIn("converged", err.getvalue())
+        conn = db.connect(self.work)
+        self.assertEqual(len(db.all_rows(conn)), 2)
+        self.assertEqual(db.meta_get(conn, "round"), "3")
+        conn.close()
 
     def _workers_base(self, max_evals: str, workers: str) -> "list[str]":
         args = self.base[: self.base.index("--max-evals") + 1] + [max_evals]

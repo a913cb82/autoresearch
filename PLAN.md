@@ -23,7 +23,8 @@ stale on ignore), `claim(id) -> bool`
 (`UPDATE … SET claimed=1 WHERE id=? AND claimed=0`, winner reads
 rowcount), `release(id)` (owns clearing; recording never clears),
 `record_score(id, score|None)` (UPDATE nodes + meta bump + INSERT
-history, one txn, in that order), `get(id)`, `best()` (highest score,
+history, one txn, in that order), `spend_round()` (bare meta bump for
+dropped duplicates), `get(id)`, `best()` (highest score,
 lowest id), `all_rows()`, `state_at(R)`.
 `node_path(nodes_dir, suffix, sha)` (suffix passed by caller).
 Dedup-hit ⇒ skip eval, release, re-pick. Failed evals still bump round
@@ -49,8 +50,7 @@ invisible). Seeded RNG in, one node id out.
 - `select(rng, rows, sampler=sample_X) -> id`: bottom-up V sample,
   descend from root (`x_n > max child v` ⇒ expand `n`, else step to
   best child). No-gains ⇒ best score, lowest id. Ties break by lower
-  id. Worker retries on lost claim or dedup (fresh draw each try,
-  tried-set, 10× scored bound); exhaustion ⇒ converged, nothing to do.
+  id. Worker passes on lost claim (next pass redraws).
 
 Tests (`test_select.py`, fixed tiny trees, hand-computed μ/σ): posterior
 asserted directly, σ₀ variance units, fixed draws injected; cold-start
@@ -74,17 +74,15 @@ plus `--model` (forwarded to `pi --print`).
 Step 0: checksum `--starter`; if a root row's sha differs, abort (two
 seeds, one tree). Same sha scored ⇒ resume. Else insert as row 1 and
 score (fails ⇒ abort). Suffix travels as a parameter; `meta` is stored
-after the seed lands. Worker body per attempt: select → claim
-(committed before improve) → improve → insert → evaluate → record,
-`finally` releasing the claim. Dedup-hit ⇒ skip eval, mark tried,
-re-pick (bounded: 10× scored draws; exhaustion ⇒ converged exit).
-Improve failure propagates loudly. Crashes abandon rows. Budgets read
-from `meta` (seed scoring consumes budget; shared across processes;
-overshoot ≤ worker count accepted). `run()` reports done; converged
-prints to stderr. Exit when done or converged. `worker()` (same body,
-own connection, `rng-seed + i`) is the multiprocess entry;
-`--workers W` spawns W of them, fails loudly on nonzero exits,
-reports convergence only when all converged.
+after the seed lands. Worker body per pass: select → claim (lost ⇒
+pass, next pass redraws) → improve → insert → new? evaluate + record
+: spend one round, drop. Every improve advances `round` exactly once;
+contention passes cost nothing. Improve failure propagates loudly.
+Crashes abandon rows. Budgets read from `meta` (seed scoring consumes
+budget; shared across processes; overshoot ≤ worker count accepted).
+Exit at budget. `worker()` (same body, own connection, `rng-seed + i`)
+is the multiprocess entry; `--workers W` spawns W of them, fails
+loudly on nonzero exits.
 
 `read.py` (`autoresearch-read --working-dir DIR`): read-only open,
 prints best path+score, exit 1 when empty.
@@ -94,7 +92,7 @@ Tests (`test_loop.py`, fixture eval + fake-`pi` scripts, fake eval e.g.
 byte-length score): exit-0 parse, bad float/nonzero ⇒ `None`, template
 renders fixture code containing braces/dollars intact, stdout
 passthrough, 5-round run (reaches selection past the 2-gain bootstrap),
-budgets stop, const-`pi` converges with `done == False`.
+budgets stop, const-`pi` burns budget on dupes and ends at budget.
 
 ## 4. Smoke
 

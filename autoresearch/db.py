@@ -102,6 +102,14 @@ def record_score(conn: sqlite3.Connection, node_id: int, score: "float | None") 
     conn.commit()
 
 
+def spend_round(conn: sqlite3.Connection) -> None:
+    round_ = int(meta_get(conn, "round") or 0) + 1
+    conn.execute(
+        "INSERT OR REPLACE INTO meta(key, value) VALUES ('round', ?)", (str(round_),)
+    )
+    conn.commit()
+
+
 def get(conn: sqlite3.Connection, node_id: int) -> sqlite3.Row:
     row = conn.execute("SELECT * FROM nodes WHERE id=?", (node_id,)).fetchone()
     assert row is not None

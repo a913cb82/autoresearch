@@ -17,9 +17,7 @@ def _worker_main(
     max_evals: int,
     template: str,
 ) -> None:
-    sys.exit(
-        0 if loop.worker(workdir, eval_exe, model, rng_seed, max_evals, template) else 2
-    )
+    loop.worker(workdir, eval_exe, model, rng_seed, max_evals, template)
 
 
 def main(argv: "list[str] | None" = None) -> int:
@@ -42,7 +40,7 @@ def main(argv: "list[str] | None" = None) -> int:
     db.meta_set(conn, "seed_suffix", starter.suffix)
     template = loop.TEMPLATE.read_text()
     if args.workers == 1:
-        done = loop.run(
+        loop.run(
             conn,
             workdir,
             args.evaluate,
@@ -51,8 +49,6 @@ def main(argv: "list[str] | None" = None) -> int:
             args.max_evals,
             template,
         )
-        if not done:
-            print("converged before budget ran out", file=sys.stderr)
         return 0
     conn.close()
     ctx = multiprocessing.get_context()
@@ -75,10 +71,7 @@ def main(argv: "list[str] | None" = None) -> int:
     for p in procs:
         p.join()
     codes = [p.exitcode for p in procs]
-    bad = [c for c in codes if c not in (0, 2)]
-    if bad:
+    if any(c != 0 for c in codes):
         print(f"worker exit codes: {codes}", file=sys.stderr)
         return 1
-    if all(c == 2 for c in codes):
-        print("converged before budget ran out", file=sys.stderr)
     return 0

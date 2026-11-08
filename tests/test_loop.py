@@ -45,32 +45,28 @@ class TestLoop(unittest.TestCase):
         db.meta_set(conn, "seed_suffix", ".py")
         with fixture_pi(variant):
             loop.ensure_seed(conn, work, b"x", EVAL, ".py")
-            done = loop.run(
-                conn, work, EVAL, "m", random.Random(0), max_evals, self.template
-            )
+            loop.run(conn, work, EVAL, "m", random.Random(0), max_evals, self.template)
         rows = [(r["sha"], r["score"]) for r in db.all_rows(conn)]
         round_ = db.meta_get(conn, "round")
         conn.close()
-        return rows, round_, done
+        return rows, round_
 
     def test_run_grows_tree_and_replays(self) -> None:
-        rows, round_, done = self._run(1)
-        self.assertTrue(done)
-        self.assertEqual(len(rows), 5)
+        rows, round_ = self._run(1)
+        self.assertEqual(len(rows), 4)
         self.assertEqual(round_, "5")
-        again, _, _ = self._run(2)
+        again, _ = self._run(2)
         self.assertEqual(again, rows)
 
     def test_budget_stops(self) -> None:
-        rows, round_, done = self._run(3, max_evals=2)
-        self.assertTrue(done)
+        rows, round_ = self._run(3, max_evals=2)
         self.assertEqual(len(rows), 2)
         self.assertEqual(round_, "2")
 
-    def test_duplicate_output_converges(self) -> None:
-        rows, _, done = self._run(4, variant="const")
-        self.assertFalse(done)
+    def test_duplicate_drops_and_burns(self) -> None:
+        rows, round_ = self._run(4, variant="const")
         self.assertEqual(len(rows), 2)
+        self.assertEqual(round_, "5")
 
     def test_improve_failure_raises_and_releases(self) -> None:
         loop.ensure_seed(self.conn, self.work, b"x", EVAL, ".py")
