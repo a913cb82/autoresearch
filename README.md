@@ -83,15 +83,13 @@ CREATE TABLE nodes(
 );
 CREATE INDEX idx_parent ON nodes(parent);
 ```
-- Claim: `UPDATE … WHERE claimed=0`. Dedup: `INSERT OR IGNORE` on `sha`.
-- `nodes/{sha}.py`: raw code; `evaluate` takes the path. Tmp+rename
-  writes. Seed is row 1, `parent = NULL`.
-- Runs live in a working dir (flag), not this repo: `tree.db`, `nodes/`.
-- History lives in the db: `history(round, id, sha, parent, score)` fed
-  by triggers on insert and score-update (`claimed` flips excluded).
-  State at round R = latest row per id with `round <= R`. `round` comes
-  from a one-row `meta` counter, bumped per iteration.
-- Tests use the same schema on `:memory:`.
+- Claim (`UPDATE … WHERE claimed=0`) and dedup (`INSERT OR IGNORE`)
+  are single statements.
+- `nodes/{sha}.py`: raw code, tmp+rename writes. Seed is row 1.
+- Working dir holds `tree.db` + `nodes/`; this repo holds neither.
+- History: `history` table via triggers (`claimed` flips excluded).
+  State at R = latest rows with `round <= R`.
+- Tests: same schema on `:memory:`.
 - Ceiling: one machine. Later backends keep the `claimed/score/parent`
   columns.
 
