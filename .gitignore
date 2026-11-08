@@ -1,3 +1,4 @@
 *-wal
 *-shm
 __pycache__/
+tree.db

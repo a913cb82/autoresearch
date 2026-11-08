@@ -79,6 +79,9 @@ CREATE INDEX idx_parent ON nodes(parent);
 - Claim: `UPDATE … WHERE claimed=0`. Dedup: `INSERT OR IGNORE` on `sha`.
 - `nodes/{sha}.py`: raw code; `evaluate` takes the path. Tmp+rename
   writes. Seed is row 1, `parent = NULL`.
+- `tree.db` is gitignored (working store). Each round exports
+  `tree.jsonl` (one row per node, append-only) and git commits that:
+  tiny diffs, readable history, reimportable.
 - Git commits per evaluated child. Tests use the same schema on `:memory:`.
 - Ceiling: one machine. Later backends keep the `claimed/score/parent`
   columns.
