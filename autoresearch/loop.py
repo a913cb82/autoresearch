@@ -1,9 +1,12 @@
 """Worker loop: select, improve via pi, evaluate. Loud failures."""
 
+import glob
 import hashlib
+import os
 import random
 import sqlite3
 import subprocess
+from importlib.resources import files
 from pathlib import Path
 
 from autoresearch import db, select
@@ -32,8 +35,55 @@ def render_prompt(template: str, mapping: dict[str, str]) -> str:
     return template
 
 
-def improve(prompt: str, model: str) -> bytes:
-    cmd = ["pi", "--print", "-nt", "--model", model]
+def _dir_files(path: Path) -> list[str]:
+    return sorted(str(p) for p in path.rglob("*") if p.is_file())
+
+
+def expand_read_paths(entries: list[str]) -> list[str]:
+    out: list[str] = []
+    for entry in entries:
+        if any(c in entry for c in "*?["):
+            matches = sorted(glob.glob(entry, recursive=True))
+            if not matches:
+                raise ValueError(f"--read-paths {entry!r} matched no files")
+            for match in matches:
+                path = Path(match)
+                if path.is_dir():
+                    out.extend(_dir_files(path))
+                elif path.is_file():
+                    out.append(match)
+                else:
+                    raise FileNotFoundError(
+                        f"--read-paths match {match!r} not readable"
+                    )
+        else:
+            path = Path(entry)
+            if not path.exists():
+                raise FileNotFoundError(f"--read-paths {entry!r} not found")
+            if path.is_dir():
+                out.extend(_dir_files(path))
+            else:
+                out.append(str(path))
+    return sorted({os.path.abspath(p) for p in out})
+
+
+def improve(prompt: str, model: str, read_paths: list[str]) -> bytes:
+    if read_paths:
+        ext = files("autoresearch").joinpath("read_approved.ts")
+        assert ext.is_file(), f"missing shipped tool: {ext}"
+        cmd = [
+            "pi",
+            "--print",
+            "-e",
+            str(ext),
+            "--tools",
+            "read_approved",
+            "--no-mcp",
+            "--model",
+            model,
+        ]
+    else:
+        cmd = ["pi", "--print", "-nt", "--model", model]
     proc = subprocess.run(
         cmd, input=prompt, capture_output=True, text=True, encoding="utf-8"
     )
@@ -52,8 +102,10 @@ def iterate(
     model: str,
     rng: random.Random,
     template: str,
+    read_paths: list[str] | None = None,
 ) -> None:
     nodes_dir = workdir / "nodes"
+    paths = read_paths or []
     rows = db.all_rows(conn)
     node_id = select.select(rng, rows)
     if not db.claim(conn, node_id):
@@ -78,9 +130,10 @@ def iterate(
                 "__BEST_SCORE__": str(best["score"]),
                 "__CURRENT_CODE__": current_code.decode("utf-8"),
                 "__CURRENT_SCORE__": str(node["score"]),
+                "__READ_PATHS__": "\n".join(f"- {p}" for p in paths),
             },
         )
-        new_code = improve(prompt, model)
+        new_code = improve(prompt, model, paths)
         target, is_new = db.add_node(conn, nodes_dir, node_id, new_code)
         if not is_new:
             db.spend_round(conn)
@@ -122,9 +175,10 @@ def run(
     rng: random.Random,
     max_rewrites: int,
     template: str,
+    read_paths: list[str] | None = None,
 ) -> None:
     while int(db.meta_get(conn, "round") or 0) < max_rewrites:
-        iterate(conn, workdir, eval_exe, model, rng, template)
+        iterate(conn, workdir, eval_exe, model, rng, template, read_paths)
 
 
 def worker(
@@ -134,6 +188,7 @@ def worker(
     seed: int,
     max_rewrites: int,
     template: str,
+    read_paths: list[str] | None = None,
 ) -> None:
     conn = db.connect(workdir)
     try:
@@ -145,6 +200,7 @@ def worker(
             random.Random(seed),
             max_rewrites,
             template,
+            read_paths,
         )
     finally:
         conn.close()

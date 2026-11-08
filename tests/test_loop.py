@@ -35,6 +35,80 @@ class TestLoop(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             loop.run_eval(str(FIXTURES / "eval_fail.py"), target)
 
+    def test_expand_read_paths_sorted_absolute(self) -> None:
+        root = Path(self.tmp.name) / "ctx"
+        (root / "sub").mkdir(parents=True)
+        (root / "b.py").write_bytes(b"BBB")
+        (root / "a.py").write_bytes(b"AAA")
+        (root / "sub" / "c.py").write_bytes(b"CCC")
+        out = loop.expand_read_paths([str(root / "b.py"), str(root / "*.py")])
+        self.assertEqual(out, sorted(out))
+        self.assertTrue(all(Path(p).is_absolute() for p in out))
+        self.assertEqual(len(out), 2)
+
+    def test_expand_read_paths_missing_raises(self) -> None:
+        with self.assertRaises(FileNotFoundError):
+            loop.expand_read_paths([str(Path(self.tmp.name) / "nope")])
+
+    def test_expand_read_paths_empty_glob_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            loop.expand_read_paths([str(Path(self.tmp.name) / "*.zz")])
+
+    def test_template_has_read_paths_token(self) -> None:
+        self.assertIn("__READ_PATHS__", self.template)
+
+    def test_read_paths_listed_not_pasted(self) -> None:
+        approved = Path(self.tmp.name) / "ref.py"
+        approved.write_bytes(b"SECRET_BODY")
+        work = Path(self.tmp.name) / "wctx"
+        conn = db.connect(str(work))
+        with fixture_pi("echo"):
+            loop.ensure_seed(conn, work, b"x", EVAL)
+            loop.run(
+                conn,
+                work,
+                EVAL,
+                "m",
+                random.Random(0),
+                2,
+                self.template,
+                [str(approved)],
+            )
+        blobs = [
+            p.read_bytes() for p in (work / "nodes").iterdir() if p.name != "env_seen"
+        ]
+        self.assertTrue(any(str(approved).encode() in b for b in blobs))
+        self.assertFalse(any(b"SECRET_BODY" in b for b in blobs))
+        self.assertFalse(any(b"__READ_PATHS__" in b for b in blobs))
+        conn.close()
+
+    def test_tool_argv_with_paths(self) -> None:
+        approved = Path(self.tmp.name) / "ref.py"
+        approved.write_bytes(b"x")
+        work = Path(self.tmp.name) / "wtool"
+        conn = db.connect(str(work))
+        with fixture_pi("assert_read"):
+            loop.ensure_seed(conn, work, b"x", EVAL)
+            loop.run(
+                conn,
+                work,
+                EVAL,
+                "m",
+                random.Random(0),
+                1,
+                self.template,
+                [str(approved)],
+            )
+        conn.close()
+
+    def test_tool_argv_without_paths(self) -> None:
+        work = Path(self.tmp.name) / "wnotool"
+        conn = db.connect(str(work))
+        with fixture_pi("assert_read"):
+            loop.ensure_seed(conn, work, b"x", EVAL)
+            loop.run(conn, work, EVAL, "m", random.Random(0), 1, self.template)
+        conn.close()
+
     def test_render_keeps_braces_dollars(self) -> None:
         code = "f('${x}')  # {brace} $dollar"
         out = loop.render_prompt("A __CURRENT_CODE__ B", {"__CURRENT_CODE__": code})

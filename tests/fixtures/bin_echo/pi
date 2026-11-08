@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Echo stdin to stdout (lets tests inspect the rendered prompt)."""
+
+import sys
+
+sys.stdout.write(sys.stdin.read())

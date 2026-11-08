@@ -66,15 +66,26 @@ stderr ignored except in the error message. EVAL inherits
 `AUTORESEARCH_SEED` (the `--seed` value) from the worker process env;
 use or ignore. Improve:
 render `prompts/improve.md` ("rewrite to score higher"; tokens
-`__PARENT_CODE__`, `__PARENT_SCORE__`, `__BEST_CODE__`, `__BEST_SCORE__`,
-`__CURRENT_CODE__`, `__CURRENT_SCORE__`; long tokens so braces/dollars
-in code can't collide), pipe to `pi --print -nt` (on PATH) via stdin;
-stdout taken verbatim as the new file. `--model` passes through
-verbatim.
+`__CURRENT_CODE__`, `__CURRENT_SCORE__`, `__READ_PATHS__`; long tokens
+so braces/dollars in code can't collide), pipe via stdin to
+`pi --print` (on PATH) with `--model` verbatim; stdout taken verbatim
+as the new file. No `--read-paths` ⇒ `-nt` (no tools). With paths ⇒
+`-e read_approved.ts` plus `--tools read_approved --no-mcp`: a static,
+checked-in read-only tool (shipped in the package, found via
+`importlib.resources`) letting the agent read exactly the files in
+`AUTORESEARCH_READ_PATHS` (same env pattern as `AUTORESEARCH_SEED`);
+anything else is denied with model-readable text.
 
 Flags: `--working-dir/--initial/--evaluate/--seed/--max-rewrites`
 (`--initial/--evaluate` optional on resume, required fresh).
-plus `--model` (forwarded to `pi --print`).
+plus `--model` (forwarded to `pi --print`), plus repeatable
+`--read-paths`. `expand_read_paths(entries)`: each entry a file, a
+dir (recursive files), or a quoted glob (`Path.glob`, `**`
+supported); relative entries resolve from invocation cwd; output
+absolutized, sorted, frozen at startup. Missing entry or zero-match
+glob ⇒ `parser.error`. CLI exports the frozen list as
+`AUTORESEARCH_READ_PATHS` alongside `AUTORESEARCH_SEED`; the prompt
+section renders from the same variable.
 Step 0: resolve `--initial` (omitted ⇒ read the root file out of the
 tree; zero/ambiguous roots abort) and `--evaluate` (omitted ⇒ stored
 path or abort; specified ⇒ normalize and compare, mismatch aborts;
@@ -99,15 +110,18 @@ Tests (`test_loop.py`, fixture eval + fake-`pi` scripts, fake eval e.g.
 byte-length score): exit-0 parse, bad float/nonzero ⇒ `RuntimeError`, template
 renders fixture code containing braces/dollars intact, stdout
 passthrough, 5-round run (reaches selection past the 2-gain bootstrap),
-budgets stop, const-`pi` burns budget on dupes and ends at budget.
+budgets stop, const-`pi` burns budget on dupes and ends at budget,
+plus read-paths expansion/argv/prompt tests.
 
 ## 4. Smoke
 
 Fake-eval CLI run (byte-length, covered by `test_cli.py`): tree grows,
-scores recorded, `read.py` prints best.
+scores recorded, `read.py` prints best. Read-paths run: session log
+shows `read_approved` calls and denials.
 No example game.
 
 ## Deferred
 
 Diff edits, `--quiet`, model tiers, split worker
-roles, MAD spread, git anything, docs beyond README.
+roles, MAD spread, git anything, docs beyond README, MCP read proxy
+(if the tool boundary is ever gamed).

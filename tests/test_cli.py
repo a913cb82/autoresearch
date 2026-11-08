@@ -1,4 +1,5 @@
 import io
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -92,6 +93,30 @@ class TestCli(unittest.TestCase):
         del args[args.index("--seed") : args.index("--seed") + 2]
         with fixture_pi("grow"):
             self.assertEqual(cli.main(args), 0)
+
+    def test_read_paths_sets_env(self) -> None:
+        ref = str(Path(self.tmp.name) / "ref.py")
+        Path(ref).write_bytes(b"x")
+        try:
+            with fixture_pi("grow"):
+                self.assertEqual(cli.main(self.base + ["--read-paths", ref]), 0)
+                self.assertEqual(os.environ["AUTORESEARCH_READ_PATHS"], ref)
+        finally:
+            os.environ.pop("AUTORESEARCH_READ_PATHS", None)
+
+    def test_read_paths_missing_aborts(self) -> None:
+        with self.assertRaises(SystemExit):
+            cli.main(self.base + ["--read-paths", str(Path(self.tmp.name) / "no")])
+
+    def test_read_paths_empty_glob_aborts(self) -> None:
+        with self.assertRaises(SystemExit):
+            cli.main(self.base + ["--read-paths", str(Path(self.tmp.name) / "*.zz")])
+
+    def test_read_paths_empty_dir_aborts(self) -> None:
+        empty = str(Path(self.tmp.name) / "empty")
+        Path(empty).mkdir()
+        with self.assertRaises(SystemExit):
+            cli.main(self.base + ["--read-paths", empty])
 
     def _without(self, args: "list[str]", flag: str) -> "list[str]":
         args = list(args)

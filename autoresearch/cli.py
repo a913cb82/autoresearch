@@ -17,11 +17,12 @@ def _worker_main(
     seed: int,
     max_rewrites: int,
     template: str,
+    read_paths: list[str],
 ) -> None:
-    loop.worker(workdir, eval_exe, model, seed, max_rewrites, template)
+    loop.worker(workdir, eval_exe, model, seed, max_rewrites, template, read_paths)
 
 
-def main(argv: "list[str] | None" = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="autoresearch")
     parser.add_argument("--working-dir", required=True)
     parser.add_argument("--initial", default=None)
@@ -30,6 +31,7 @@ def main(argv: "list[str] | None" = None) -> int:
     parser.add_argument("--max-rewrites", required=True, type=int)
     parser.add_argument("--model", required=True)
     parser.add_argument("--workers", default=1, type=int)
+    parser.add_argument("--read-paths", action="append", default=[])
     args = parser.parse_args(argv)
     if args.workers < 1:
         parser.error("--workers must be >= 1")
@@ -57,7 +59,14 @@ def main(argv: "list[str] | None" = None) -> int:
     loop.ensure_seed(conn, workdir, seed, eval_exe)
     if stored is None:
         db.meta_set(conn, "evaluate", eval_exe)
+    try:
+        read_paths = loop.expand_read_paths(args.read_paths)
+    except (FileNotFoundError, ValueError) as e:
+        parser.error(str(e))
+    if args.read_paths and not read_paths:
+        parser.error("--read-paths matched no files")
     os.environ["AUTORESEARCH_SEED"] = str(args.seed)
+    os.environ["AUTORESEARCH_READ_PATHS"] = os.pathsep.join(read_paths)
     template = loop.TEMPLATE.read_text()
     if args.workers == 1:
         loop.run(
@@ -68,6 +77,7 @@ def main(argv: "list[str] | None" = None) -> int:
             random.Random(args.seed),
             args.max_rewrites,
             template,
+            read_paths,
         )
         return 0
     conn.close()
@@ -82,6 +92,7 @@ def main(argv: "list[str] | None" = None) -> int:
                 args.seed + i,
                 args.max_rewrites,
                 template,
+                read_paths,
             ),
         )
         for i in range(args.workers)

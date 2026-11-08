@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+"""Assert the pi argv matches the read-tool contract, then succeed."""
+
+import sys
+
+a = sys.argv[1:]
+if "--tools" in a:
+    assert "read_approved" in a, a
+    assert "--no-mcp" in a, a
+    assert "-e" in a, a
+    assert "-nt" not in a, a
+else:
+    assert "-nt" in a, a
+print("ok")

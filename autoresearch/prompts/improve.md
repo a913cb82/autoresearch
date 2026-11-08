@@ -1,21 +1,13 @@
 Rewrite the code below to score higher. Higher is better.
 
-Parent score: __PARENT_SCORE__
-
-```
-__PARENT_CODE__
-```
-
-Best score: __BEST_SCORE__
-
-```
-__BEST_CODE__
-```
-
 Current score: __CURRENT_SCORE__
 
+Current code:
 ```
 __CURRENT_CODE__
 ```
 
-Reply with the complete improved file, nothing else.
+You may read these reference files with read_approved (read-only, nothing else):
+__READ_PATHS__
+
+Reply with the complete improved code, nothing else.
