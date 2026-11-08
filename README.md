@@ -4,15 +4,21 @@ Searches code improvements against a user-supplied scoring function.
 
 ## Usage
 
-`autoresearch --working-dir DIR --starter SEED --evaluate EVAL --max-evals M --model MODEL [--rng-seed N --workers W]`
+### Run
+```bash
+autoresearch --working-dir DIR --initial INITIAL --evaluate EVAL --max-evals M --model MODEL [--seed N --workers W]
+```
+- `EVAL`: executable. Called as `EVAL <filepath>` (`AUTORESEARCH_SEED` in the environment); returns the score to stdout.
+- `INITIAL`: starting file.
 
-- `EVAL`: executable. Called as `EVAL <filepath>`; returns the score to stdout.
-- `SEED`: starting file.
+### Read results
+```bash
+autoresearch-read --working-dir DIR
+```
 
 ## Loop
 
-Until budgets run out — one worker runs it serially, N run it
-concurrently:
+Until the budget runs out:
 
 1. Select a node (atomic claim).
 2. Agent rewrites its code to raise the score.
@@ -20,10 +26,7 @@ concurrently:
 
 ### Concurrency
 
-`--workers W` runs W processes on the same loop body (worker `i` seeds
-`rng-seed + i`); the atomic claim coordinates. A failed worker exits
-nonzero and the CLI reports its code. Orderly failure releases the
-claim; crashed claims are abandoned.
+`--workers W` runs the loop on W processes over the same working dir.
 
 ## Selection
 
@@ -68,15 +71,12 @@ For node `n` with score `s_n` and children `c_1…k` scoring `s_1…s_k`:
 
 ```
 working-dir/              # --working-dir DIR, per run
-├── tree.db               # SQLite WAL: nodes, history, meta tables
+├── tree.db               # SQLite WAL: nodes, meta tables
 └── nodes/                # code for each node
-    ├── <sha1>.py
-    ├── <sha2>.py
+    ├── <sha1>
+    ├── <sha2>
     └── …
 ```
-
-- `tree.db`: SQLite WAL. `score NULL` = no score (unevaluated or
-  failed eval); NULL rows are invisible to selection.
 
 ```sql
 CREATE TABLE nodes(
@@ -86,20 +86,10 @@ CREATE TABLE nodes(
   score   REAL,
   claimed INTEGER DEFAULT 0
 );
-CREATE INDEX idx_parent ON nodes(parent);
+CREATE TABLE meta(
+  key TEXT PRIMARY KEY CHECK(key IN ('round')),  -- attempt counter
+  value TEXT);
 ```
-- Claim: `UPDATE … SET claimed=1 WHERE id=? AND claimed=0`, winner
-  reads rowcount. Release owns clearing; recording never does.
-  Dedup: `INSERT OR IGNORE` on `sha`.
-- `nodes/{sha}<suffix>`: raw code (suffix from seed), tmp+rename writes.
-  Seed is row 1.
-- `meta`: `round` counter (every scoring bumps it), `seed_suffix`.
-- Working dir holds `tree.db` + `nodes/`; this repo holds neither.
-- History: explicit `history` writes on scoring (`claimed` flips
-  excluded). State at R = latest rows with `round <= R`.
-- Tests: same schema on `:memory:`.
-- Ceiling: one machine. Later backends keep the `claimed/score/parent`
-  columns.
 
 ## Status
 
