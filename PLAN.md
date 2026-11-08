@@ -53,14 +53,14 @@ collapses, Tree A → B1, bad-kid root → respawn.
 
 ## 3. `improve.py`
 
-`improve(code: bytes, parent_code, best_code) -> bytes`: `urllib` POST
-to `$OPENAI_BASE_URL/chat/completions` (`$OPENAI_API_KEY`,
-`$OPENAI_MODEL`), prompt = parent + best + current code with "reply
-with the complete file, nothing else". Parse JSON envelope, take
-`choices[0].message.content`, strip ``` fences, return remainder bytes.
+`improve(code: bytes, parent_code, best_code) -> bytes`: pipe prompt
+(parent + best + current code, "reply with the complete file, nothing
+else") to `pi --print -nt` via stdin; stdout taken verbatim as the new
+file. No tools, no parsing. Model config is pi's own; `--model` passes
+through verbatim.
 
-Tests (`test_improve.py`, mocked HTTP): prompt contents, envelope
-parse, fence strip, bytes passthrough.
+Tests (`test_improve.py`, fixture fake-`pi` executable): prompt
+contents, stdout passthrough.
 
 ## 4. `loop.py` + `cli.py`
 
@@ -69,7 +69,8 @@ Eval is a helper here, not a module: `run(eval_exe, path)` spawns
 else `None`. Nonzero exit ⇒ `None` (unscored, selector-blind).
 Timeouts are EVAL's job. stderr ignored.
 
-Flags: `--working-dir/--starter/--evaluate/--seed/--max-evals`.
+Flags: `--working-dir/--starter/--evaluate/--seed/--max-evals` plus
+`--model` (forwarded to `pi --print`).
 Step 0: checksum `--starter`; if the root row's sha differs, abort (two
 seeds, one tree). Same sha scored ⇒ resume. Else insert and score
 (fails ⇒ abort). Worker body: select → claim
