@@ -95,10 +95,6 @@ CREATE INDEX idx_parent ON nodes(parent);
 - Ceiling: one machine. Later backends keep the `claimed/score/parent`
   columns.
 
-## Non-goals
-
-No concurrency, grids, islands, judges. One loop, one exam, one tree.
-
 ## Status
 
 v0: this README. Code to follow.
