@@ -25,7 +25,7 @@ class TestSelect(unittest.TestCase):
         ids = []
         for parent_idx, score, code in specs:
             parent = ids[parent_idx] if parent_idx is not None else None
-            node_id, _ = db.add_node(conn, self.nodes, ".py", parent, code)
+            node_id, _ = db.add_node(conn, self.nodes, parent, code)
             ids.append(node_id)
             if score is not None:
                 db.record_score(conn, node_id, score)

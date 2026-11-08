@@ -11,17 +11,19 @@ from autoresearch import db, select
 TEMPLATE = Path(__file__).parent / "prompts" / "improve.md"
 
 
-def run_eval(eval_exe: str, path: Path) -> float | None:
+def run_eval(eval_exe: str, path: Path) -> float:
     proc = subprocess.run([eval_exe, str(path)], capture_output=True, text=True)
     if proc.returncode != 0:
-        return None
+        raise RuntimeError(
+            f"{eval_exe} {path} exited {proc.returncode}: {proc.stderr.strip()}"
+        )
     for line in proc.stdout.splitlines():
         if line.strip():
             try:
                 return float(line)
             except ValueError:
                 continue
-    return None
+    raise RuntimeError(f"{eval_exe} {path} printed no score")
 
 
 def render_prompt(template: str, mapping: dict[str, str]) -> str:
@@ -30,8 +32,8 @@ def render_prompt(template: str, mapping: dict[str, str]) -> str:
     return template
 
 
-def improve(prompt: str, model: str | None) -> bytes:
-    cmd = ["pi", "--print", "-nt"] + (["--model", model] if model else [])
+def improve(prompt: str, model: str) -> bytes:
+    cmd = ["pi", "--print", "-nt", "--model", model]
     proc = subprocess.run(
         cmd, input=prompt, capture_output=True, text=True, encoding="utf-8"
     )
@@ -47,31 +49,26 @@ def iterate(
     conn: sqlite3.Connection,
     workdir: Path,
     eval_exe: str,
-    model: str | None,
+    model: str,
     rng: random.Random,
     template: str,
 ) -> None:
     nodes_dir = workdir / "nodes"
-    suffix = db.meta_get(conn, "seed_suffix")
-    assert suffix is not None
     rows = db.all_rows(conn)
     node_id = select.select(rng, rows)
     if not db.claim(conn, node_id):
         return
     try:
         node = next(r for r in rows if int(r["id"]) == node_id)
-        path = db.node_path(nodes_dir, suffix, str(node["sha"]))
-        current_code = path.read_bytes()
+        current_code = db.node_path(nodes_dir, str(node["sha"])).read_bytes()
         parent_code, parent_score = current_code, node["score"]
         if node["parent"] is not None:
             parent = db.get(conn, int(node["parent"]))
-            parent_code = db.node_path(
-                nodes_dir, suffix, str(parent["sha"])
-            ).read_bytes()
+            parent_code = db.node_path(nodes_dir, str(parent["sha"])).read_bytes()
             parent_score = parent["score"]
         best = db.best(conn)
         assert best is not None
-        best_code = db.node_path(nodes_dir, suffix, str(best["sha"])).read_bytes()
+        best_code = db.node_path(nodes_dir, str(best["sha"])).read_bytes()
         prompt = render_prompt(
             template,
             {
@@ -84,30 +81,24 @@ def iterate(
             },
         )
         new_code = improve(prompt, model)
-        target, is_new = db.add_node(conn, nodes_dir, suffix, node_id, new_code)
+        target, is_new = db.add_node(conn, nodes_dir, node_id, new_code)
         if not is_new:
             db.spend_round(conn)
             return
         target_row = db.get(conn, target)
-        score = run_eval(
-            eval_exe, db.node_path(nodes_dir, suffix, str(target_row["sha"]))
-        )
+        score = run_eval(eval_exe, db.node_path(nodes_dir, str(target_row["sha"])))
         db.record_score(conn, target, score)
     finally:
         db.release(conn, node_id)
 
 
 def ensure_seed(
-    conn: sqlite3.Connection,
-    workdir: Path,
-    seed: bytes,
-    eval_exe: str,
-    suffix: str,
+    conn: sqlite3.Connection, workdir: Path, seed: bytes, eval_exe: str
 ) -> int:
     sha = hashlib.sha256(seed).hexdigest()
     roots = [r for r in db.all_rows(conn) if r["parent"] is None]
     if any(str(r["sha"]) != sha for r in roots):
-        raise SystemExit("working dir seed differs from --starter")
+        raise SystemExit("working dir seed differs from --initial")
     hit = [r for r in roots if r["sha"] == sha and r["score"] is not None]
     if hit:
         return int(hit[0]["id"])
@@ -116,11 +107,9 @@ def ensure_seed(
         target = int(same[0]["id"])
     else:
         assert not roots
-        target, _ = db.add_node(conn, workdir / "nodes", suffix, None, seed)
+        target, _ = db.add_node(conn, workdir / "nodes", None, seed)
         assert target == 1
-    score = run_eval(eval_exe, db.node_path(workdir / "nodes", suffix, sha))
-    if score is None:
-        raise SystemExit("seed failed to score")
+    score = run_eval(eval_exe, db.node_path(workdir / "nodes", sha))
     db.record_score(conn, target, score)
     return target
 
@@ -129,7 +118,7 @@ def run(
     conn: sqlite3.Connection,
     workdir: Path,
     eval_exe: str,
-    model: str | None,
+    model: str,
     rng: random.Random,
     max_evals: int,
     template: str,
@@ -141,8 +130,8 @@ def run(
 def worker(
     workdir: str,
     eval_exe: str,
-    model: str | None,
-    rng_seed: int,
+    model: str,
+    seed: int,
     max_evals: int,
     template: str,
 ) -> None:
@@ -153,7 +142,7 @@ def worker(
             Path(workdir),
             eval_exe,
             model,
-            random.Random(rng_seed),
+            random.Random(seed),
             max_evals,
             template,
         )

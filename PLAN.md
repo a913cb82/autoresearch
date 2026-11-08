@@ -12,9 +12,10 @@ CREATE TABLE nodes(
   id INTEGER PRIMARY KEY, sha TEXT UNIQUE NOT NULL,
   parent INTEGER REFERENCES nodes(id), score REAL,
   claimed INTEGER DEFAULT 0);
-CREATE INDEX idx_parent ON nodes(parent);
--- round on nodes: scoring stamp (state at R = WHERE round<=R)
--- meta(key,value): round counter (round = evaluation attempts), seed_suffix
+CREATE TABLE meta(
+  key TEXT PRIMARY KEY CHECK(key IN ('round')),
+  value TEXT);
+-- meta.round: evaluation attempts (dupes burn attempts without rows)
 ```
 
 Functions: `add_node(parent, code: bytes) -> (id, is_new)` (tmp+rename +
@@ -22,18 +23,16 @@ Functions: `add_node(parent, code: bytes) -> (id, is_new)` (tmp+rename +
 stale on ignore), `claim(id) -> bool`
 (`UPDATE … SET claimed=1 WHERE id=? AND claimed=0`, winner reads
 rowcount), `release(id)` (owns clearing; recording never clears),
-`record_score(id, score|None)` (stamps score+round on the row + meta
-bump, one txn), `spend_round()` (bare meta bump for dropped
-duplicates), `get(id)`, `best()` (highest score,
-lowest id), `all_rows()`, `state_at(R)`.
-`node_path(nodes_dir, suffix, sha)` (suffix passed by caller).
-Dedup-hit ⇒ skip eval, release, re-pick. Failed evals still bump round
-(work was spent).
+`record_score(id, score)` (UPDATE score + meta bump via
+`spend_round`, one txn), `spend_round()` (bare meta bump, also used for
+dropped duplicates), `get(id)`, `best()` (highest score, lowest id),
+`all_rows()`.
+`node_path(nodes_dir, sha)` (extensionless).
+Dedup-hit ⇒ skip eval, release, re-pick.
 
 Tests (`test_db.py`, `:memory:` except one tmpdir two-process claim
 race): dedup collapse + id SELECT, double-claim one winner,
-score+round atomic with claim held, state-at-R, `:memory:` asserts no
-WAL.
+score+round atomic with claim held, `:memory:` asserts no WAL.
 
 ## 2. `select.py`
 
@@ -60,8 +59,11 @@ is prior, flat line collapses, Tree A → B1, bad-kid root → respawn.
 
 Two subprocess helpers live here, not as modules. Eval: `run(eval_exe,
 path)` spawns `EVAL <path>` and waits; first non-empty stdout line
-parses as float else `None`. Nonzero exit ⇒ `None` (unscored,
-selector-blind). Timeouts are EVAL's job. stderr ignored. Improve:
+parses as float else `RuntimeError`, aborting the run. Nonzero exit ⇒
+`RuntimeError` with returncode and stderr. Timeouts are EVAL's job.
+stderr ignored except in the error message. EVAL inherits
+`AUTORESEARCH_SEED` (the `--seed` value) from the worker process env;
+use or ignore. Improve:
 render `prompts/improve.md` ("rewrite to score higher"; tokens
 `__PARENT_CODE__`, `__PARENT_SCORE__`, `__BEST_CODE__`, `__BEST_SCORE__`,
 `__CURRENT_CODE__`, `__CURRENT_SCORE__`; long tokens so braces/dollars
@@ -69,18 +71,18 @@ in code can't collide), pipe to `pi --print -nt` (on PATH) via stdin;
 stdout taken verbatim as the new file. `--model` passes through
 verbatim.
 
-Flags: `--working-dir/--starter/--evaluate/--rng-seed/--max-evals`
+Flags: `--working-dir/--initial/--evaluate/--seed/--max-evals`
 plus `--model` (forwarded to `pi --print`).
-Step 0: checksum `--starter`; if a root row's sha differs, abort (two
+Step 0: checksum `--initial`; if a root row's sha differs, abort (two
 seeds, one tree). Same sha scored ⇒ resume. Else insert as row 1 and
-score (fails ⇒ abort). Suffix travels as a parameter; `meta` is stored
-after the seed lands. Worker body per pass: select → claim (lost ⇒
+score (fails ⇒ abort). CLI exports `--seed` as `AUTORESEARCH_SEED`
+before running (workers inherit via fork). Worker body per pass: select → claim (lost ⇒
 pass, next pass redraws) → improve → insert → new? evaluate + record
 : spend one round, drop. Every improve advances `round` exactly once;
 contention passes cost nothing. Improve failure propagates loudly.
 Crashes abandon rows. Budgets read from `meta` (seed scoring consumes
 budget; shared across processes; overshoot ≤ worker count accepted).
-Exit at budget. `worker()` (same body, own connection, `rng-seed + i`)
+Exit at budget. `worker()` (same body, own connection, `seed + i`)
 is the multiprocess entry; `--workers W` spawns W of them, fails
 loudly on nonzero exits.
 
@@ -89,7 +91,7 @@ prints best path+score, exit 1 when empty.
 Test: fixed db, assert output.
 
 Tests (`test_loop.py`, fixture eval + fake-`pi` scripts, fake eval e.g.
-byte-length score): exit-0 parse, bad float/nonzero ⇒ `None`, template
+byte-length score): exit-0 parse, bad float/nonzero ⇒ `RuntimeError`, template
 renders fixture code containing braces/dollars intact, stdout
 passthrough, 5-round run (reaches selection past the 2-gain bootstrap),
 budgets stop, const-`pi` burns budget on dupes and ends at budget.
@@ -97,7 +99,7 @@ budgets stop, const-`pi` burns budget on dupes and ends at budget.
 ## 4. Smoke
 
 Fake-eval CLI run (byte-length, covered by `test_cli.py`): tree grows,
-scores recorded, `read.py` prints best, history replays state-at-R.
+scores recorded, `read.py` prints best.
 No example game.
 
 ## Deferred

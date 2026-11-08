@@ -10,9 +10,10 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS nodes(
   id INTEGER PRIMARY KEY, sha TEXT UNIQUE NOT NULL,
   parent INTEGER REFERENCES nodes(id), score REAL,
-  claimed INTEGER DEFAULT 0, round INTEGER);
-CREATE INDEX IF NOT EXISTS idx_parent ON nodes(parent);
-CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
+  claimed INTEGER DEFAULT 0);
+CREATE TABLE IF NOT EXISTS meta(
+  key TEXT PRIMARY KEY CHECK(key IN ('round')),
+  value TEXT);
 """
 
 
@@ -30,14 +31,13 @@ def connect(working_dir: "str | Path") -> sqlite3.Connection:
     return conn
 
 
-def node_path(nodes_dir: "str | Path", suffix: str, sha: str) -> Path:
-    return Path(nodes_dir) / f"{sha}{suffix}"
+def node_path(nodes_dir: "str | Path", sha: str) -> Path:
+    return Path(nodes_dir) / sha
 
 
 def add_node(
     conn: sqlite3.Connection,
     nodes_dir: "str | Path",
-    suffix: str,
     parent: "int | None",
     code: bytes,
 ) -> "tuple[int, bool]":
@@ -47,7 +47,7 @@ def add_node(
     fd, tmp = tempfile.mkstemp(dir=directory, prefix=".tmp-")
     with os.fdopen(fd, "wb") as f:
         f.write(code)
-    os.rename(tmp, directory / f"{sha}{suffix}")
+    os.rename(tmp, directory / sha)
     cur = conn.execute(
         "INSERT OR IGNORE INTO nodes(parent, sha) VALUES (?, ?)", (parent, sha)
     )
@@ -83,15 +83,9 @@ def meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
     conn.commit()
 
 
-def record_score(conn: sqlite3.Connection, node_id: int, score: "float | None") -> None:
-    round_ = int(meta_get(conn, "round") or 0) + 1
-    conn.execute(
-        "UPDATE nodes SET score=?, round=? WHERE id=?", (score, round_, node_id)
-    )
-    conn.execute(
-        "INSERT OR REPLACE INTO meta(key, value) VALUES ('round', ?)", (str(round_),)
-    )
-    conn.commit()
+def record_score(conn: sqlite3.Connection, node_id: int, score: float) -> None:
+    conn.execute("UPDATE nodes SET score=? WHERE id=?", (score, node_id))
+    spend_round(conn)
 
 
 def spend_round(conn: sqlite3.Connection) -> None:
@@ -117,9 +111,3 @@ def best(conn: sqlite3.Connection) -> "sqlite3.Row | None":
 
 def all_rows(conn: sqlite3.Connection) -> "list[sqlite3.Row]":
     return conn.execute("SELECT * FROM nodes ORDER BY id").fetchall()
-
-
-def state_at(conn: sqlite3.Connection, round_: int) -> "list[sqlite3.Row]":
-    return conn.execute(
-        "SELECT * FROM nodes WHERE round<=? ORDER BY id", (round_,)
-    ).fetchall()

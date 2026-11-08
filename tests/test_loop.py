@@ -15,7 +15,6 @@ class TestLoop(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.work = Path(self.tmp.name) / "work"
         self.conn = db.connect(str(self.work))
-        db.meta_set(self.conn, "seed_suffix", ".py")
         self.nodes = self.work / "nodes"
         self.template = (
             Path(__file__).parent.parent / "autoresearch" / "prompts" / "improve.md"
@@ -31,8 +30,10 @@ class TestLoop(unittest.TestCase):
         target.write_bytes(b"12345")
         self.assertEqual(loop.run_eval(str(FIXTURES / "eval_len.py"), target), 5.0)
         self.assertEqual(loop.run_eval(str(FIXTURES / "eval_warn.py"), target), 42.0)
-        self.assertIsNone(loop.run_eval(str(FIXTURES / "eval_bad.py"), target))
-        self.assertIsNone(loop.run_eval(str(FIXTURES / "eval_fail.py"), target))
+        with self.assertRaises(RuntimeError):
+            loop.run_eval(str(FIXTURES / "eval_bad.py"), target)
+        with self.assertRaises(RuntimeError):
+            loop.run_eval(str(FIXTURES / "eval_fail.py"), target)
 
     def test_render_keeps_braces_dollars(self) -> None:
         code = "f('${x}')  # {brace} $dollar"
@@ -42,9 +43,8 @@ class TestLoop(unittest.TestCase):
     def _run(self, seed: int, variant: str = "grow", max_evals: int = 5):
         work = Path(self.tmp.name) / f"w{seed}"
         conn = db.connect(str(work))
-        db.meta_set(conn, "seed_suffix", ".py")
         with fixture_pi(variant):
-            loop.ensure_seed(conn, work, b"x", EVAL, ".py")
+            loop.ensure_seed(conn, work, b"x", EVAL)
             loop.run(conn, work, EVAL, "m", random.Random(0), max_evals, self.template)
         rows = [(r["sha"], r["score"]) for r in db.all_rows(conn)]
         round_ = db.meta_get(conn, "round")
@@ -69,7 +69,7 @@ class TestLoop(unittest.TestCase):
         self.assertEqual(round_, "5")
 
     def test_improve_failure_raises_and_releases(self) -> None:
-        loop.ensure_seed(self.conn, self.work, b"x", EVAL, ".py")
+        loop.ensure_seed(self.conn, self.work, b"x", EVAL)
         with fixture_pi("fail"):
             with self.assertRaises(subprocess.CalledProcessError):
                 loop.iterate(
@@ -83,22 +83,21 @@ class TestLoop(unittest.TestCase):
         self.assertEqual(db.all_rows(self.conn)[0]["claimed"], 0)
 
     def test_ensure_seed_resume_mismatch_broken(self) -> None:
-        loop.ensure_seed(self.conn, self.work, b"x", EVAL, ".py")
+        loop.ensure_seed(self.conn, self.work, b"x", EVAL)
         before = (len(db.all_rows(self.conn)), db.meta_get(self.conn, "round"))
-        loop.ensure_seed(self.conn, self.work, b"x", EVAL, ".py")
+        loop.ensure_seed(self.conn, self.work, b"x", EVAL)
         self.assertEqual(
             (len(db.all_rows(self.conn)), db.meta_get(self.conn, "round")), before
         )
         with self.assertRaises(SystemExit):
-            loop.ensure_seed(self.conn, self.work, b"other", EVAL, ".py")
+            loop.ensure_seed(self.conn, self.work, b"other", EVAL)
         conn2 = db.connect(str(Path(self.tmp.name) / "w9"))
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(RuntimeError):
             loop.ensure_seed(
                 conn2,
                 Path(self.tmp.name) / "w9",
                 b"x",
                 str(FIXTURES / "eval_fail.py"),
-                ".py",
             )
         conn2.close()
 

@@ -19,7 +19,6 @@ def main(argv: "list[str] | None" = None) -> int:
     if best is None:
         print("no scored nodes", file=sys.stderr)
         return 1
-    suffix = db.meta_get(conn, "seed_suffix") or ""
-    path = db.node_path(workdir / "nodes", suffix, str(best["sha"]))
+    path = db.node_path(workdir / "nodes", str(best["sha"]))
     print(f"{path} {best['score']}")
     return 0

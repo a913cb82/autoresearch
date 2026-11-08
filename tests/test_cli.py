@@ -17,11 +17,11 @@ class TestCli(unittest.TestCase):
         self.base = [
             "--working-dir",
             self.work,
-            "--starter",
+            "--initial",
             self.seed,
             "--evaluate",
             str(FIXTURES / "eval_len.py"),
-            "--rng-seed",
+            "--seed",
             "0",
             "--max-evals",
             "2",
@@ -72,6 +72,26 @@ class TestCli(unittest.TestCase):
     def test_workers_zero_rejected(self) -> None:
         with self.assertRaises(SystemExit):
             cli.main(self._workers_base("2", "0"))
+
+    def test_eval_sees_seed_env(self) -> None:
+        args = list(self.base)
+        args[args.index("--evaluate") + 1] = str(FIXTURES / "eval_record.py")
+        with fixture_pi("grow"):
+            self.assertEqual(cli.main(args), 0)
+        seen = Path(self.work) / "nodes" / "env_seen"
+        self.assertEqual(seen.read_text(), "0")
+
+    def test_model_required(self) -> None:
+        args = list(self.base)
+        del args[args.index("--model") : args.index("--model") + 2]
+        with self.assertRaises(SystemExit):
+            cli.main(args)
+
+    def test_seed_defaults(self) -> None:
+        args = list(self.base)
+        del args[args.index("--seed") : args.index("--seed") + 2]
+        with fixture_pi("grow"):
+            self.assertEqual(cli.main(args), 0)
 
     def test_read_empty(self) -> None:
         conn = db.connect(self.work)

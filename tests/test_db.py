@@ -1,4 +1,5 @@
 import multiprocessing
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,58 +26,42 @@ class TestDb(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_add_and_dedup(self) -> None:
-        node_id, is_new = db.add_node(self.conn, self.nodes, ".py", None, b"print(1)")
+        node_id, is_new = db.add_node(self.conn, self.nodes, None, b"print(1)")
         self.assertEqual((node_id, is_new), (1, True))
-        same_id, same_new = db.add_node(self.conn, self.nodes, ".py", None, b"print(1)")
+        same_id, same_new = db.add_node(self.conn, self.nodes, None, b"print(1)")
         self.assertEqual((same_id, same_new), (1, False))
-        self.assertEqual(db.node_path(self.nodes, ".py", "x").parent, self.nodes)
+        self.assertEqual(db.node_path(self.nodes, "x").parent, self.nodes)
         files = list(self.nodes.iterdir())
         self.assertEqual(len(files), 1)
+        self.assertEqual(files[0].suffix, "")
         self.assertEqual(files[0].read_bytes(), b"print(1)")
 
     def test_claim_release(self) -> None:
-        node_id, _ = db.add_node(self.conn, self.nodes, ".py", None, b"a")
+        node_id, _ = db.add_node(self.conn, self.nodes, None, b"a")
         self.assertTrue(db.claim(self.conn, node_id))
         self.assertFalse(db.claim(self.conn, node_id))
         db.release(self.conn, node_id)
         self.assertTrue(db.claim(self.conn, node_id))
 
     def test_record_score_round_history(self) -> None:
-        node_id, _ = db.add_node(self.conn, self.nodes, ".py", None, b"a")
+        node_id, _ = db.add_node(self.conn, self.nodes, None, b"a")
         db.claim(self.conn, node_id)
         db.record_score(self.conn, node_id, 0.5)
         row = db.all_rows(self.conn)[0]
         self.assertEqual(row["score"], 0.5)
-        self.assertEqual(row["round"], 1)
         self.assertEqual(row["claimed"], 1)
         db.release(self.conn, node_id)
         self.assertTrue(db.claim(self.conn, node_id))
         self.assertEqual(db.meta_get(self.conn, "round"), "1")
-        state = db.state_at(self.conn, 1)
-        self.assertEqual(len(state), 1)
-        self.assertEqual(state[0]["score"], 0.5)
 
-    def test_record_none_stays_null_bumps_round(self) -> None:
-        node_id, _ = db.add_node(self.conn, self.nodes, ".py", None, b"a")
-        db.record_score(self.conn, node_id, None)
-        self.assertIsNone(db.all_rows(self.conn)[0]["score"])
-        self.assertEqual(db.meta_get(self.conn, "round"), "1")
-
-    def test_state_at_reconstructs_rounds(self) -> None:
-        root, _ = db.add_node(self.conn, self.nodes, ".py", None, b"root")
-        db.record_score(self.conn, root, 0.1)
-        kid, _ = db.add_node(self.conn, self.nodes, ".py", root, b"kid")
-        db.record_score(self.conn, kid, 0.9)
-        round1 = db.state_at(self.conn, 1)
-        self.assertEqual(len(round1), 1)
-        self.assertEqual(round1[0]["score"], 0.1)
-        round2 = db.state_at(self.conn, 2)
-        self.assertEqual(len(round2), 2)
+    def test_meta_rejects_unknown_key(self) -> None:
+        with self.assertRaises(sqlite3.IntegrityError):
+            db.meta_set(self.conn, "rounds", "1")
 
     def test_claim_race_two_processes(self) -> None:
         db_dir = str(Path(self.tmp.name) / "race")
         conn = db.connect(db_dir)
-        node_id, _ = db.add_node(conn, Path(db_dir) / "nodes", ".py", None, b"a")
+        node_id, _ = db.add_node(conn, Path(db_dir) / "nodes", None, b"a")
         conn.close()
         queue: multiprocessing.Queue[bool] = multiprocessing.Queue()
         procs = [
