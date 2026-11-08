@@ -22,7 +22,8 @@ Best score kept.
 
 ### Concurrency
 
-N processes run the same loop body. Orphaned claims are resumed.
+N processes run the same loop body. Orderly failure releases the claim;
+crashed claims are abandoned, never retried.
 
 ## Selection
 
@@ -83,8 +84,8 @@ CREATE TABLE nodes(
 );
 CREATE INDEX idx_parent ON nodes(parent);
 ```
-- Claim sets `claimed` to now-epoch: single `UPDATE` taking `claimed=0`
-  or stale rows. Dedup: `INSERT OR IGNORE` on `sha`.
+- Claim: single `UPDATE … SET claimed=1 WHERE claimed=0`. Dedup:
+  `INSERT OR IGNORE` on `sha`.
 - `nodes/{sha}<suffix>`: raw code (suffix from seed), tmp+rename writes.
   Seed is row 1.
 - Working dir holds `tree.db` + `nodes/`; this repo holds neither.
