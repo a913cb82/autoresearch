@@ -17,6 +17,13 @@ Serial, until budgets run out:
 
 Best score kept.
 
+## Usage
+
+`autoresearch --working-dir DIR --starter SEED.py --evaluate EVAL.py`
+
+The working dir holds `tree.db` and `nodes/`. This repo holds framework
+only — no run results.
+
 ## Selection
 
 | Symbol | Meaning |
@@ -79,13 +86,12 @@ CREATE INDEX idx_parent ON nodes(parent);
 - Claim: `UPDATE … WHERE claimed=0`. Dedup: `INSERT OR IGNORE` on `sha`.
 - `nodes/{sha}.py`: raw code; `evaluate` takes the path. Tmp+rename
   writes. Seed is row 1, `parent = NULL`.
-- `tree.db` is gitignored (working store). History lives inside it: a
-  `history(round, id, sha, parent, score)` table fed by triggers on
-  insert and score-update (`claimed` flips excluded — operational, not
-  evidence). State at round R = latest row per id with `round <= R`.
-  `round` comes from a one-row `meta` counter, bumped per iteration.
-- Git commits code only (`nodes/`), per evaluated child. Tests use the
-  same schema on `:memory:`.
+- Runs live in a working dir (flag), not this repo: `tree.db`, `nodes/`.
+- History lives in the db: `history(round, id, sha, parent, score)` fed
+  by triggers on insert and score-update (`claimed` flips excluded).
+  State at round R = latest row per id with `round <= R`. `round` comes
+  from a one-row `meta` counter, bumped per iteration.
+- Tests use the same schema on `:memory:`.
 - Ceiling: one machine. Later backends keep the `claimed/score/parent`
   columns.
 
