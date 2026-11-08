@@ -80,7 +80,8 @@ CREATE INDEX idx_parent ON nodes(parent);
 - `nodes/{sha}.py`: raw code; `evaluate` takes the path. Tmp+rename
   writes. Seed is row 1, `parent = NULL`.
 - Git commits per evaluated child. Tests use the same schema on `:memory:`.
-- Ceiling: one machine. Later backends keep `claim/score/children`.
+- Ceiling: one machine. Later backends keep the `claimed/score/parent`
+  columns.
 
 ## Non-goals
 
