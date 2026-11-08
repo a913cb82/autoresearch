@@ -81,7 +81,10 @@ seeds, one tree). Same sha scored ⇒ resume. Else insert and score
 (committed before improve) → improve → insert → evaluate → record.
 Orderly failure releases the claim; crashes abandon rows. Budgets read
 from `meta` (shared across processes; overshoot ≤ worker count
-accepted). Exit when done; best read later via a tiny script (deferred).
+accepted). Exit when done.
+
+`read.py` (separate entry `autoresearch-read`): prints best path+score
+from a working dir. Test: fixed db, assert output.
 
 Tests (`test_loop.py`, fake eval e.g. byte-length score): 5-round run
 (reaches selection past the 2-gain bootstrap), budgets stop.
@@ -94,5 +97,4 @@ printed, history replays state-at-R. No example game.
 ## Deferred
 
 Diff edits, `--max-time`, `--quiet`, model tiers/flags, split worker
-roles, `--workers` flag, MAD spread, git anything, docs beyond README,
-read-only db inspect script.
+roles, `--workers` flag, MAD spread, git anything, docs beyond README.
