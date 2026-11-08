@@ -6,11 +6,8 @@ Searches code improvements against a user-supplied scoring function.
 
 `autoresearch --working-dir DIR --starter SEED --evaluate EVAL`
 
-- `EVAL`: executable. Called as `EVAL <filepath> <seed>`; first stdout
-  line is the score, the rest is notes for the improver. Same
-  file + seed ⇒ same output. Raise (nonzero exit) on broken code:
-  recorded unscored, invisible to the selector.
-- `SEED`: starting file, any language, tree root.
+- `EVAL`: executable. Called as `EVAL <filepath>`; returns the score to stdout.
+- `SEED`: starting file.
 
 ## Loop
 
