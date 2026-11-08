@@ -66,16 +66,11 @@ sampling, not a setting):
 
 | What | Detail |
 |---|---|
-| `tree.db` | SQLite WAL, stdlib only |
-| table | `nodes(id, sha UNIQUE, parent, score, claimed)`, index on `parent` |
-| `score NULL` | unevaluated |
-| `claimed` | worker flag; `UPDATE … WHERE claimed=0`, winner reads rowcount |
-| dedup | atomic via `INSERT OR IGNORE` on `sha` |
-| `nodes/{sha}.py` | code as raw files; `evaluate` takes the path; tmp+rename writes |
-| seed | row 1, `parent = NULL` |
-| git | commits `tree.db` + `nodes/` per keep |
-| tests | same schema on `:memory:` |
-| ceiling | one machine; later backends keep the `claim/score/children` interface |
+| `tree.db` | SQLite WAL, stdlib only. `nodes(id, sha UNIQUE, parent, score, claimed)`, index on `parent`. `score NULL` = unevaluated |
+| atomic ops | claim: `UPDATE … WHERE claimed=0`; dedup: `INSERT OR IGNORE` on `sha` |
+| `nodes/{sha}.py` | raw code; `evaluate` takes the path; tmp+rename writes; seed is row 1, `parent = NULL` |
+| git / tests | commit per keep; same schema on `:memory:` |
+| ceiling | one machine; later backends keep `claim/score/children` |
 
 ## Non-goals
 
