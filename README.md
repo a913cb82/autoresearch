@@ -64,6 +64,21 @@ promising nodes ranks above a single good node.
 **Numbers.** Fixed, never tuned: weights 1 and 2. Learned: `σ₀` globally;
 `μ`, `σ` per node. Nothing else.
 
+## Storage
+
+- `tree.db` (SQLite, WAL mode, stdlib only): one table —
+  `nodes(id, sha UNIQUE, parent, score, claimed)`, index on `parent`.
+  `score NULL` = unevaluated. `claimed` = worker-claim flag:
+  `UPDATE … WHERE claimed=0`, winner reads rowcount. Dedup is atomic
+  via `INSERT OR IGNORE` on `sha`.
+- `nodes/{sha}.py`: code as raw files, content-addressed. `evaluate`
+  takes the path directly; concurrent writers use write-tmp + rename.
+  Seed is row 1, `parent = NULL`.
+- Git commits `tree.db` + `nodes/` per keep: free time-travel.
+- Tests run the same schema on `:memory:`.
+- Ceiling: one machine. Multi-machine day = swap the backend;
+  `claim/score/children` is the whole interface.
+
 ## Non-goals
 
 No concurrency, grids, islands, judges. One loop, one exam, one tree.
