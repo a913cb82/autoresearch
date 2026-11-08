@@ -20,9 +20,9 @@ concurrently:
 
 Best score kept.
 
-Workers: N processes run the loop body. Selection claims atomically;
-stale claims are retried, unscored orphans evaluated before generating
-new.
+### Concurrency
+
+N processes run the same loop body. Orphaned claims are resumed.
 
 ## Selection
 
