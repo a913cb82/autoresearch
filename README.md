@@ -23,7 +23,7 @@ Best score kept.
 ### Concurrency
 
 N processes run the same loop body. Orderly failure releases the claim;
-crashed claims are abandoned, never retried.
+crashed claims are abandoned.
 
 ## Selection
 
