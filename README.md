@@ -14,7 +14,7 @@ pi auth
 ```
 
 - Write executable `EVAL` file; called as `EVAL <filepath>` with `AUTORESEARCH_SEED` in the environment
-  - Evaluates the code in `filepath` and outputs a float score to stdout.
+  - Evaluates the code in `filepath` and always outputs a finite float score to stdout.
 - Write `INITIAL`; first file to be scored by `EVAL`.
   - Describe the goal of the code in `INITIAL`; the coding agents won't be able to see the `EVAL` script.
 
@@ -22,7 +22,10 @@ pi auth
 
 ### Run
 ```bash
-autoresearch --working-dir DIR --initial INITIAL --evaluate EVAL --max-rewrites M --model MODEL [--seed N --workers W --read-paths PATH]
+autoresearch \
+  --working-dir DIR --initial INITIAL --evaluate EVAL \
+  --max-rewrites M --model MODEL \
+  [--seed N --generators G --evaluators E --read-paths PATH]
 ```
 - `--read-paths`: files the agent may read
 - Running in an existing working-dir restores the previous run
@@ -43,7 +46,9 @@ Until the budget runs out:
 
 ### Concurrency
 
-`--workers W` runs the loop on W processes over the same working dir.
+`--generators G` (rewrite workers) and `--evaluators E` (score workers)
+run as separate processes over the same working dir. Generators select,
+rewrite, and insert unscored rows; evaluators score them.
 
 ## Selection
 
@@ -96,7 +101,7 @@ CREATE TABLE nodes(
   sha     TEXT UNIQUE NOT NULL,
   parent  INTEGER REFERENCES nodes(id),
   score   REAL,
-  claimed INTEGER DEFAULT 0
+  scoring INTEGER DEFAULT 0
 );
 CREATE TABLE meta(
   key TEXT PRIMARY KEY CHECK(key IN ('round', 'evaluate')),  -- attempt counter

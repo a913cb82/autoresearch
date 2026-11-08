@@ -31,6 +31,10 @@ class TestLoop(unittest.TestCase):
             loop.run_eval(str(FIXTURES / "eval_bad.py"), target)
         with self.assertRaises(RuntimeError):
             loop.run_eval(str(FIXTURES / "eval_fail.py"), target)
+        with self.assertRaises(RuntimeError):
+            loop.run_eval(str(FIXTURES / "eval_neginf.py"), target)
+        with self.assertRaises(RuntimeError):
+            loop.run_eval(str(FIXTURES / "eval_nan.py"), target)
 
     def test_expand_read_paths_sorted_absolute(self) -> None:
         root = Path(self.tmp.name) / "ctx"
@@ -58,10 +62,9 @@ class TestLoop(unittest.TestCase):
         conn = db.connect(str(work))
         with fixture_pi("echo"):
             loop.ensure_seed(conn, work, b"x", EVAL)
-            loop.run(
+            loop.generate(
                 conn,
                 work,
-                EVAL,
                 "m",
                 random.Random(0),
                 2,
@@ -81,10 +84,9 @@ class TestLoop(unittest.TestCase):
         conn = db.connect(str(work))
         with fixture_pi("assert_read"):
             loop.ensure_seed(conn, work, b"x", EVAL)
-            loop.run(
+            loop.generate(
                 conn,
                 work,
-                EVAL,
                 "m",
                 random.Random(0),
                 1,
@@ -92,12 +94,96 @@ class TestLoop(unittest.TestCase):
             )
         conn.close()
 
+    def test_evaluate_logs_new_best(self) -> None:
+        work = Path(self.tmp.name) / "wlog"
+        conn = db.connect(str(work))
+        with fixture_pi("grow"):
+            loop.ensure_seed(conn, work, b"x", EVAL)
+            loop.generate(conn, work, "m", random.Random(0), 1)
+            with self.assertLogs("autoresearch.loop", level="INFO") as logs:
+                loop.evaluate(conn, work, EVAL, 1)
+        self.assertTrue(any("[1/1] best 4.0 (node 2)" in line for line in logs.output))
+        conn.close()
+
+    def test_evaluate_logs_only_new_best(self) -> None:
+        work = Path(self.tmp.name) / "wbest"
+        conn = db.connect(str(work))
+        with fixture_pi("const"):
+            loop.ensure_seed(conn, work, b"x", EVAL)
+            loop.generate(conn, work, "m", random.Random(0), 3)
+            with self.assertLogs("autoresearch.loop", level="INFO") as logs:
+                loop.evaluate(conn, work, EVAL, 3)
+        best_lines = [line for line in logs.output if "best" in line]
+        self.assertEqual(len(best_lines), 1)
+        self.assertIn("[3/3] best", best_lines[0])
+        conn.close()
+
+    def test_generate_inserts_unscored_and_spends(self) -> None:
+        work = Path(self.tmp.name) / "wgen"
+        conn = db.connect(str(work))
+        with fixture_pi("grow"):
+            loop.ensure_seed(conn, work, b"x", EVAL)
+            loop.generate(conn, work, "m", random.Random(0), 1)
+        rows = db.all_rows(conn)
+        self.assertEqual(len(rows), 2)
+        self.assertIsNone(rows[1]["score"])
+        self.assertEqual(db.meta_get(conn, "round"), "1")
+        conn.close()
+
+    def test_evaluate_scores_and_drains(self) -> None:
+        work = Path(self.tmp.name) / "weval"
+        conn = db.connect(str(work))
+        with fixture_pi("grow"):
+            loop.ensure_seed(conn, work, b"x", EVAL)
+            loop.generate(conn, work, "m", random.Random(0), 1)
+            with self.assertLogs("autoresearch.loop", level="INFO") as logs:
+                loop.evaluate(conn, work, EVAL, 1)
+        rows = db.all_rows(conn)
+        self.assertTrue(all(r["score"] is not None for r in rows))
+        self.assertEqual(db.meta_get(conn, "round"), "1")
+        self.assertTrue(any("scored node" in line for line in logs.output))
+        conn.close()
+
+    def test_evaluate_idle_exits_at_budget(self) -> None:
+        work = Path(self.tmp.name) / "widle"
+        conn = db.connect(str(work))
+        with fixture_pi("grow"):
+            loop.ensure_seed(conn, work, b"x", EVAL)
+            db.spend_round(conn)
+            loop.evaluate(conn, work, EVAL, 1)
+        conn.close()
+
+    def test_evaluator_waits_for_work(self) -> None:
+        import threading
+        import time
+
+        work = Path(self.tmp.name) / "wwait"
+        conn = db.connect(str(work))
+        with fixture_pi("grow"):
+            loop.ensure_seed(conn, work, b"x", EVAL)
+
+            def late_gen() -> None:
+                time.sleep(1.2)
+                c = db.connect(str(work))
+                try:
+                    loop.generate(c, work, "m", random.Random(0), 1)
+                finally:
+                    c.close()
+
+            t = threading.Thread(target=late_gen)
+            t.start()
+            loop.evaluate(conn, work, EVAL, 1)
+            t.join()
+        rows = db.all_rows(conn)
+        self.assertTrue(all(r["score"] is not None for r in rows))
+        conn.close()
+
     def test_tool_argv_without_paths(self) -> None:
         work = Path(self.tmp.name) / "wnotool"
         conn = db.connect(str(work))
         with fixture_pi("assert_read"):
             loop.ensure_seed(conn, work, b"x", EVAL)
-            loop.run(conn, work, EVAL, "m", random.Random(0), 1)
+            loop.generate(conn, work, "m", random.Random(0), 1)
         conn.close()
 
     def _run(self, seed: int, variant: str = "grow", max_rewrites: int = 5):
@@ -105,22 +191,37 @@ class TestLoop(unittest.TestCase):
         conn = db.connect(str(work))
         with fixture_pi(variant):
             loop.ensure_seed(conn, work, b"x", EVAL)
-            loop.run(conn, work, EVAL, "m", random.Random(0), max_rewrites)
+            loop.generate(conn, work, "m", random.Random(0), max_rewrites)
         rows = [(r["sha"], r["score"]) for r in db.all_rows(conn)]
         round_ = db.meta_get(conn, "round")
         conn.close()
         return rows, round_
 
-    def test_run_grows_tree_and_replays(self) -> None:
+    def test_lone_parent_dupes_burn_budget(self) -> None:
         rows, round_ = self._run(1)
-        self.assertEqual(len(rows), 5)
+        self.assertEqual(len(rows), 2)
         self.assertEqual(round_, "5")
         again, _ = self._run(2)
         self.assertEqual(again, rows)
 
+    def test_staged_scores_steer_selection(self) -> None:
+        work = Path(self.tmp.name) / "wstage"
+        conn = db.connect(str(work))
+        with fixture_pi("grow"):
+            loop.ensure_seed(conn, work, b"x", EVAL)
+            rng = random.Random(0)
+            loop.generate(conn, work, "m", rng, 1)
+            loop.evaluate(conn, work, EVAL, 1)
+            loop.generate(conn, work, "m", rng, 2)
+        self.assertEqual(
+            [(r["id"], r["parent"], r["score"]) for r in db.all_rows(conn)],
+            [(1, None, 1.0), (2, 1, 4.0), (3, 2, None)],
+        )
+        conn.close()
+
     def test_budget_stops(self) -> None:
         rows, round_ = self._run(3, max_rewrites=2)
-        self.assertEqual(len(rows), 3)
+        self.assertEqual(len(rows), 2)
         self.assertEqual(round_, "2")
 
     def test_duplicate_drops_and_burns(self) -> None:
@@ -128,18 +229,16 @@ class TestLoop(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(round_, "5")
 
-    def test_improve_failure_raises_and_releases(self) -> None:
+    def test_improve_failure_raises(self) -> None:
         loop.ensure_seed(self.conn, self.work, b"x", EVAL)
         with fixture_pi("fail"):
             with self.assertRaises(subprocess.CalledProcessError):
                 loop.iterate(
                     self.conn,
                     self.work,
-                    EVAL,
                     "m",
                     random.Random(0),
                 )
-        self.assertEqual(db.all_rows(self.conn)[0]["claimed"], 0)
 
     def test_ensure_seed_resume_mismatch_broken(self) -> None:
         loop.ensure_seed(self.conn, self.work, b"x", EVAL)

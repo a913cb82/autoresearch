@@ -30,5 +30,6 @@ def render(
         "```\n"
         f"{current_code}\n"
         "```\n"
-        f"{refs}Reply with the complete improved code, nothing else.\n"
+        f"{refs}Reply with the complete improved file and nothing else."
+        " No markdown fences, no explanation.\n"
     )

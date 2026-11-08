@@ -10,7 +10,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS nodes(
   id INTEGER PRIMARY KEY, sha TEXT UNIQUE NOT NULL,
   parent INTEGER REFERENCES nodes(id), score REAL,
-  claimed INTEGER DEFAULT 0);
+  scoring INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS meta(
   key TEXT PRIMARY KEY CHECK(key IN ('round', 'evaluate')),
   value TEXT);
@@ -60,19 +60,6 @@ def add_node(
     return row["id"], False
 
 
-def claim(conn: sqlite3.Connection, node_id: int) -> bool:
-    cur = conn.execute(
-        "UPDATE nodes SET claimed=1 WHERE id=? AND claimed=0", (node_id,)
-    )
-    conn.commit()
-    return cur.rowcount == 1
-
-
-def release(conn: sqlite3.Connection, node_id: int) -> None:
-    conn.execute("UPDATE nodes SET claimed=0 WHERE id=?", (node_id,))
-    conn.commit()
-
-
 def meta_get(conn: sqlite3.Connection, key: str) -> "str | None":
     row = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
     return row["value"] if row else None
@@ -83,14 +70,41 @@ def meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
     conn.commit()
 
 
+def reserve(conn: sqlite3.Connection) -> "sqlite3.Row | None":
+    assert sqlite3.sqlite_version_info >= (3, 35), "reserve needs SQLite 3.35+"
+    row = conn.execute(
+        "UPDATE nodes SET scoring=1 WHERE id=("
+        "SELECT MIN(id) FROM nodes WHERE score IS NULL AND scoring=0"
+        ") RETURNING *"
+    ).fetchone()
+    conn.commit()
+    return row
+
+
+def reset_scoring(conn: sqlite3.Connection) -> None:
+    conn.execute("UPDATE nodes SET scoring=0 WHERE scoring=1")
+    conn.commit()
+
+
 def record_score(
     conn: sqlite3.Connection, node_id: int, score: float, count: bool = True
 ) -> None:
-    conn.execute("UPDATE nodes SET score=? WHERE id=?", (score, node_id))
+    conn.execute("UPDATE nodes SET score=?, scoring=0 WHERE id=?", (score, node_id))
     if count:
         spend_round(conn)
     else:
         conn.commit()
+
+
+def claim_round(conn: sqlite3.Connection, max_rewrites: int) -> bool:
+    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('round', '0')")
+    cur = conn.execute(
+        "UPDATE meta SET value = CAST(value AS INTEGER) + 1"
+        " WHERE key = 'round' AND CAST(value AS INTEGER) < ?",
+        (max_rewrites,),
+    )
+    conn.commit()
+    return cur.rowcount == 1
 
 
 def spend_round(conn: sqlite3.Connection) -> None:

@@ -38,12 +38,12 @@ class TestCli(unittest.TestCase):
             self.assertEqual(cli.main(self.base), 0)
             self.assertEqual(cli.main(self.base), 0)
         conn = db.connect(self.work)
-        self.assertEqual(len(db.all_rows(conn)), 3)
+        self.assertEqual(len(db.all_rows(conn)), 2)
         conn.close()
         out = io.StringIO()
         with redirect_stdout(out):
             self.assertEqual(read.main(["--working-dir", self.work]), 0)
-        self.assertIn("7.0", out.getvalue())
+        self.assertIn("4.0", out.getvalue())
 
     def test_stuck_agent_ends_at_budget(self) -> None:
         args = self.base[: self.base.index("--max-rewrites") + 1] + [
@@ -58,21 +58,50 @@ class TestCli(unittest.TestCase):
         self.assertEqual(db.meta_get(conn, "round"), "3")
         conn.close()
 
-    def _workers_base(self, max_rewrites: str, workers: str) -> "list[str]":
+    def _split_base(
+        self, max_rewrites: str, generators: str, evaluators: str
+    ) -> "list[str]":
         args = self.base[: self.base.index("--max-rewrites") + 1] + [max_rewrites]
-        return args + ["--model", "m", "--workers", workers]
+        return args + [
+            "--model",
+            "m",
+            "--generators",
+            generators,
+            "--evaluators",
+            evaluators,
+        ]
 
-    def test_workers_two(self) -> None:
+    def test_split_completes(self) -> None:
         with fixture_pi("grow"):
-            self.assertEqual(cli.main(self._workers_base("3", "2")), 0)
+            self.assertEqual(cli.main(self._split_base("3", "2", "1")), 0)
         conn = db.connect(self.work)
-        self.assertGreaterEqual(len(db.all_rows(conn)), 3)
-        self.assertGreaterEqual(int(db.meta_get(conn, "round") or 0), 3)
+        self.assertEqual(len(db.all_rows(conn)), 2)
+        self.assertEqual(db.meta_get(conn, "round"), "3")
         conn.close()
 
-    def test_workers_zero_rejected(self) -> None:
+    def test_split_zero_rejected(self) -> None:
         with self.assertRaises(SystemExit):
-            cli.main(self._workers_base("2", "0"))
+            cli.main(self._split_base("2", "0", "1"))
+        with self.assertRaises(SystemExit):
+            cli.main(self._split_base("2", "1", "0"))
+
+    def test_startup_wipes_scoring(self) -> None:
+        with fixture_pi("grow"):
+            self.assertEqual(cli.main(self.base), 0)
+        conn = db.connect(self.work)
+        target, _ = db.add_node(conn, Path(self.work) / "nodes", 1, b"stuck")
+        row = db.reserve(conn)
+        assert row is not None
+        self.assertEqual(row["id"], target)
+        conn.close()
+        args = list(self.base)
+        args[args.index("--max-rewrites") + 1] = "3"
+        with fixture_pi("grow"):
+            self.assertEqual(cli.main(args), 0)
+        conn = db.connect(self.work)
+        rows = {r["id"]: r for r in db.all_rows(conn)}
+        self.assertIsNotNone(rows[target]["score"])
+        conn.close()
 
     def test_eval_sees_seed_env(self) -> None:
         args = list(self.base)
@@ -140,7 +169,7 @@ class TestCli(unittest.TestCase):
             self.assertEqual(cli.main(args), 0)
         conn = db.connect(self.work)
         self.assertEqual(db.meta_get(conn, "round"), "3")
-        self.assertEqual(len(db.all_rows(conn)), 4)
+        self.assertEqual(len(db.all_rows(conn)), 3)
         conn.close()
 
     def test_resume_eval_mismatch_aborts(self) -> None:

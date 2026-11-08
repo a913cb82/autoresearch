@@ -11,7 +11,7 @@ Store. `connect(dir)` creates dirs, enables WAL, builds schema.
 CREATE TABLE nodes(
   id INTEGER PRIMARY KEY, sha TEXT UNIQUE NOT NULL,
   parent INTEGER REFERENCES nodes(id), score REAL,
-  claimed INTEGER DEFAULT 0);
+  scoring INTEGER DEFAULT 0);
 CREATE TABLE meta(
   key TEXT PRIMARY KEY CHECK(key IN ('round', 'evaluate')),
   value TEXT);
@@ -21,19 +21,23 @@ CREATE TABLE meta(
 
 Functions: `add_node(parent, code: bytes) -> (id, is_new)` (tmp+rename +
 `INSERT OR IGNORE`; on sha hit, SELECT the existing id — `lastrowid` is
-stale on ignore), `claim(id) -> bool`
-(`UPDATE … SET claimed=1 WHERE id=? AND claimed=0`, winner reads
-rowcount), `release(id)` (owns clearing; recording never clears),
-`record_score(id, score)` (UPDATE score + meta bump via
+stale on ignore),
+`record_score(id, score)` (UPDATE score + clear scoring + meta bump via
 `spend_round`, one txn), `spend_round()` (bare meta bump, also used for
-dropped duplicates), `get(id)`, `best()` (highest score, lowest id),
-`all_rows()`.
+dropped duplicates), `reserve()` (atomic eval grab:
+`UPDATE … SET scoring=1 WHERE score IS NULL AND scoring=0 … RETURNING id`;
+needs SQLite 3.35+, asserted), `get(id)`, `best()` (highest score,
+lowest id), `all_rows()`. `connect()` ensures the scoring column
+(`ALTER TABLE`, old dirs).
 `node_path(nodes_dir, sha)` (extensionless).
-Dedup-hit ⇒ skip eval, release, re-pick.
+Dedup-hit ⇒ skip eval, spend one round; next pass re-picks.
+No claims: concurrent same-parent work just yields siblings (dedup
+absorbs identical code); kills leave NULL orphans the selector
+ignores, so no recovery exists.
 
-Tests (`test_db.py`, `:memory:` except one tmpdir two-process claim
-race): dedup collapse + id SELECT, double-claim one winner,
-score+round atomic with claim held, `:memory:` asserts no WAL.
+Tests (`test_db.py`, `:memory:`): dedup collapse + id SELECT,
+score+round atomic, reserve race (two processes, one NULL ⇒ one winner),
+`:memory:` asserts no WAL.
 
 ## 2. `select.py`
 
@@ -50,7 +54,7 @@ invisible). Seeded RNG in, one node id out.
 - `select(rng, rows, sampler=sample_X) -> id`: bottom-up V sample,
   descend from root (`x_n > max child v` ⇒ expand `n`, else step to
   best child). No-gains ⇒ best score, lowest id. Ties break by lower
-  id. Worker passes on lost claim (next pass redraws).
+  id.
 
 Tests (`test_select.py`, fixed tiny trees, hand-computed μ/σ): posterior
 asserted directly, σ₀ variance units, fixed draws injected; cold-start
@@ -97,15 +101,26 @@ path or abort; specified ⇒ normalize and compare, mismatch aborts;
 fresh run stores it). Checksum the seed; divergent root aborts (two
 seeds, one tree). Same sha scored ⇒ resume. Else insert as row 1 and
 score (fails ⇒ abort). CLI exports `--seed` as `AUTORESEARCH_SEED`
-before running (workers inherit via fork). Worker body per pass: select → claim (lost ⇒
-pass, next pass redraws) → improve → insert → new? evaluate + record
-: spend one round, drop. Every improve advances `round` exactly once;
-contention passes cost nothing. Improve failure propagates loudly.
-Crashes abandon rows. Budgets read from `meta` (seed setup excluded;
-shared across processes; overshoot ≤ worker count accepted).
-Exit at budget. `worker()` (same body, own connection, `seed + i`)
-is the multiprocess entry; `--workers W` spawns W of them, fails
-loudly on nonzero exits.
+before running (workers inherit via fork). CLI wipes `scoring` markers
+at startup (previous owners gone) and takes `--generators G` /
+`--evaluators E` (default 1/1). Generator claims one round per pass (atomic at dispatch; dupe/crash
+burns it — round never exceeds max) → select (scores trail
+generation; staleness accepted) → improve → insert. Evaluator loop: reserve oldest NULL → evaluate →
+record (`count=False`) → exit when `round >= max` and no unmarked
+NULLs (recheck once; round hits max at dispatch so this can fire
+early — tail caught below), else sleep-poll 1s. Stuck markers are left for resume; FIFO
+by id scores them first. `evaluate()` logs `scored node …` per score
+and `[round/max] best <score> (node <id>)` (INFO) only on improvement
+(timestamps via `basicConfig`); generator/evaluator start INFO;
+nonzero exits WARNING. Improve/EVAL failure propagates loudly.
+Crashes abandon rows (NULL orphans stay invisible). Budget claimed
+from `meta` (seed setup excluded; shared across processes; atomic so
+concurrent claims never exceed max).
+Exit at budget plus drain: CLI joins generators (no rewrites in
+progress — every pass landed), joins evaluators, then drains any tail
+itself. Terminate + return 1 on generator failure; leftovers for
+resume. Generators (`seed + i`) and evaluators spawn
+as separate processes; nonzero exits fail loudly.
 
 `read.py` (`autoresearch-read --working-dir DIR`): read-only open,
 prints best path+score, exit 1 when empty.
@@ -116,17 +131,19 @@ byte-length score): exit-0 parse, bad float/nonzero ⇒ `RuntimeError`, template
 renders fixture code containing braces/dollars intact, stdout
 passthrough, 5-round run (reaches selection past the 2-gain bootstrap),
 budgets stop, const-`pi` burns budget on dupes and ends at budget,
-plus read-paths expansion/argv/prompt tests.
+plus read-paths expansion/argv/prompt tests, plus split-role
+(generator inserts NULL, evaluator scores, drain exits) tests.
 
 ## 4. Smoke
 
 Fake-eval CLI run (byte-length, covered by `test_cli.py`): tree grows,
 scores recorded, `read.py` prints best. Read-paths run: session log
-shows `read_approved` calls and denials.
+shows `read_approved` calls and denials. TSP split-role smoke
+(G=4, E=1): scores trail generation, drain completes.
 No example game.
 
 ## Deferred
 
-Diff edits, `--quiet`, model tiers, split worker
-roles, MAD spread, git anything, docs beyond README, MCP read proxy
+Diff edits, `--quiet`, model tiers, MAD spread,
+git anything, docs beyond README, MCP read proxy
 (if the tool boundary is ever gamed).
