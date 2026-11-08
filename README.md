@@ -108,4 +108,4 @@ CREATE INDEX idx_parent ON nodes(parent);
 
 ## Status
 
-v0: serial worker, manual concurrent launch. `--workers` deferred.
+v0: worker loop, serial or `--workers N`.
