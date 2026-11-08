@@ -4,10 +4,13 @@ Searches code improvements against a user-supplied scoring function.
 
 ## Usage
 
-`autoresearch --working-dir DIR --starter SEED.py --evaluate EVAL.py`
+`autoresearch --working-dir DIR --starter SEED --evaluate EVAL`
 
-- `EVAL.py` defines `evaluate(filepath: str) -> float`, deterministic.
-- `SEED.py` is the starting code, tree root.
+- `EVAL`: executable. Called as `EVAL <filepath> <seed>`; first stdout
+  line is the score, the rest is notes for the improver. Same
+  file + seed ⇒ same output. Raise (nonzero exit) on broken code:
+  recorded unscored, invisible to the selector.
+- `SEED`: starting file, any language, tree root.
 
 ## Loop
 
@@ -89,7 +92,8 @@ CREATE INDEX idx_parent ON nodes(parent);
 ```
 - Claim (`UPDATE … WHERE claimed=0`) and dedup (`INSERT OR IGNORE`)
   are single statements.
-- `nodes/{sha}.py`: raw code, tmp+rename writes. Seed is row 1.
+- `nodes/{sha}<suffix>`: raw code (suffix from seed), tmp+rename writes.
+  Seed is row 1.
 - Working dir holds `tree.db` + `nodes/`; this repo holds neither.
 - History: `history` table via triggers (`claimed` flips excluded).
   State at R = latest rows with `round <= R`.
