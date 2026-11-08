@@ -57,9 +57,11 @@ Two subprocess helpers live here, not as modules. Eval: `run(eval_exe,
 path)` spawns `EVAL <path>` and waits; first non-empty stdout line
 parses as float else `None`. Nonzero exit ⇒ `None` (unscored,
 selector-blind). Timeouts are EVAL's job. stderr ignored. Improve:
-pipe prompt (parent + best + current code, "reply with the complete
-file, nothing else") to `pi --print -nt` (on PATH) via stdin; stdout
-taken verbatim as the new file. `--model` passes through verbatim.
+render `prompts/improve.md` (tokens `__PARENT_CODE__`, `__PARENT_SCORE__`,
+`__BEST_CODE__`, `__BEST_SCORE__`, `__CURRENT_CODE__`, `__CURRENT_SCORE__`;
+long tokens so braces/dollars in code can't collide), pipe to
+`pi --print -nt` (on PATH) via stdin; stdout taken verbatim as the new
+file. `--model` passes through verbatim.
 
 Flags: `--working-dir/--starter/--evaluate/--seed/--max-evals` plus
 `--model` (forwarded to `pi --print`).
@@ -75,9 +77,10 @@ accepted). Exit when done.
 Test: fixed db, assert output.
 
 Tests (`test_loop.py`, fixture eval + fake-`pi` scripts, fake eval e.g.
-byte-length score): exit-0 parse, bad float/nonzero ⇒ `None`, prompt
-contents, stdout passthrough, 5-round run (reaches selection past the
-2-gain bootstrap), budgets stop.
+byte-length score): exit-0 parse, bad float/nonzero ⇒ `None`, template
+renders fixture code containing braces/dollars intact, stdout
+passthrough, 5-round run (reaches selection past the 2-gain bootstrap),
+budgets stop.
 
 ## 4. Smoke
 
