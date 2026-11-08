@@ -33,7 +33,7 @@ For node `n` with score `s_n` and children `c_1…k` scoring `s_1…s_k`:
 - `σ₀²` is the variance of all `child − parent` gains.
 - `θ_n ~ N(s_n, σ₀²)`, weight 1 (smallest sample with a mean).
 - `σ²_n ~ InvGamma` around `σ₀²`, weight 2 (smallest sample with a spread).
-- Likelihood: children `~ N(θ_n, σ²_n)`.
+- Likelihood: each observed `s_i ~ N(θ_n, σ²_n)`.
 
 **Posterior** (exact):
 - `μ = (s_n + Σs_i)/(1+k)`
@@ -45,7 +45,6 @@ For node `n` with score `s_n` and children `c_1…k` scoring `s_1…s_k`:
 - `V_n` is the best score reachable in `n`'s subtree
 - `B_n` is the best scored node at/below it
 - `V_n = max(B_n, X_n, max child V)`
-- Descendants shape `V_n`.
 
 **Decide** (Thompson sampling; one seeded draw per node per round):
 1. Sample every `V_n`: draw each `X_n`, max with `B_n`, child samples.
