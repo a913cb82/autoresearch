@@ -55,6 +55,22 @@ class TestCli(unittest.TestCase):
             self.assertEqual(cli.main(args), 0)
         self.assertIn("converged", err.getvalue())
 
+    def _workers_base(self, max_evals: str, workers: str) -> "list[str]":
+        args = self.base[: self.base.index("--max-evals") + 1] + [max_evals]
+        return args + ["--model", "m", "--workers", workers]
+
+    def test_workers_two(self) -> None:
+        with fixture_pi("grow"):
+            self.assertEqual(cli.main(self._workers_base("3", "2")), 0)
+        conn = db.connect(self.work)
+        self.assertGreaterEqual(len(db.all_rows(conn)), 3)
+        self.assertGreaterEqual(int(db.meta_get(conn, "round") or 0), 3)
+        conn.close()
+
+    def test_workers_zero_rejected(self) -> None:
+        with self.assertRaises(SystemExit):
+            cli.main(self._workers_base("2", "0"))
+
     def test_read_empty(self) -> None:
         conn = db.connect(self.work)
         conn.close()

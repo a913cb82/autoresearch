@@ -4,7 +4,7 @@ Searches code improvements against a user-supplied scoring function.
 
 ## Usage
 
-`autoresearch --working-dir DIR --starter SEED --evaluate EVAL --rng-seed N --max-evals M [--model MODEL]`
+`autoresearch --working-dir DIR --starter SEED --evaluate EVAL --rng-seed N --max-evals M [--model MODEL] [--workers W]`
 
 - `EVAL`: executable. Called as `EVAL <filepath>`; returns the score to stdout.
 - `SEED`: starting file.
@@ -25,9 +25,10 @@ Best score kept. Convergence (no new code) prints to stderr.
 
 ### Concurrency
 
-N processes run the same loop body (launch them manually; the claim
-coordinates). Orderly failure releases the claim; crashed claims are
-abandoned.
+`--workers W` runs W processes on the same loop body (worker `i` seeds
+`rng-seed + i`); the atomic claim coordinates. A failed worker exits
+nonzero and the CLI reports its code. Orderly failure releases the
+claim; crashed claims are abandoned.
 
 ## Selection
 

@@ -143,3 +143,26 @@ def run(
         if not iterate(conn, workdir, eval_exe, model, rng, template):
             return False
     return True
+
+
+def worker(
+    workdir: str,
+    eval_exe: str,
+    model: str | None,
+    rng_seed: int,
+    max_evals: int,
+    template: str,
+) -> bool:
+    conn = db.connect(workdir)
+    try:
+        return run(
+            conn,
+            Path(workdir),
+            eval_exe,
+            model,
+            random.Random(rng_seed),
+            max_evals,
+            template,
+        )
+    finally:
+        conn.close()

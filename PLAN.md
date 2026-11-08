@@ -81,7 +81,10 @@ re-pick (bounded: 10× scored draws; exhaustion ⇒ converged exit).
 Improve failure propagates loudly. Crashes abandon rows. Budgets read
 from `meta` (seed scoring consumes budget; shared across processes;
 overshoot ≤ worker count accepted). `run()` reports done; converged
-prints to stderr. Exit when done or converged.
+prints to stderr. Exit when done or converged. `worker()` (same body,
+own connection, `rng-seed + i`) is the multiprocess entry;
+`--workers W` spawns W of them, fails loudly on nonzero exits,
+reports convergence only when all converged.
 
 `read.py` (`autoresearch-read --working-dir DIR`): read-only open,
 prints best path+score, exit 1 when empty.
@@ -101,5 +104,5 @@ No example game.
 
 ## Deferred
 
-Diff edits, `--max-time`, `--quiet`, model tiers, split worker
-roles, `--workers` flag, MAD spread, git anything, docs beyond README.
+Diff edits, `--quiet`, model tiers, split worker
+roles, MAD spread, git anything, docs beyond README.
