@@ -4,10 +4,13 @@ Searches code improvements against a user-supplied scoring function.
 
 ## Usage
 
-`autoresearch --working-dir DIR --starter SEED --evaluate EVAL`
+`autoresearch --working-dir DIR --starter SEED --evaluate EVAL --rng-seed N --max-evals M [--model MODEL]`
 
 - `EVAL`: executable. Called as `EVAL <filepath>`; returns the score to stdout.
 - `SEED`: starting file.
+- `--rng-seed`: selection randomness. `--max-evals`: evaluation budget
+  (seed scoring consumes one). Improve runs `pi --print -nt` on PATH;
+  `--model` passes through.
 
 ## Loop
 
@@ -16,14 +19,15 @@ concurrently:
 
 1. Select a node (atomic claim).
 2. Agent rewrites its code to raise the score.
-3. Score the rewrite; attach as a child.
+3. Score the rewrite; attach as a child (unless identical code exists).
 
-Best score kept.
+Best score kept. Convergence (no new code) prints to stderr.
 
 ### Concurrency
 
-N processes run the same loop body. Orderly failure releases the claim;
-crashed claims are abandoned.
+N processes run the same loop body (launch them manually; the claim
+coordinates). Orderly failure releases the claim; crashed claims are
+abandoned.
 
 ## Selection
 
@@ -46,15 +50,18 @@ For node `n` with score `s_n` and children `c_1…k` scoring `s_1…s_k`:
 - `B_n` is the best scored node at/below `n`
 - `V_n = max(B_n, X_n, max child V)`
 - `V_n` is the best score reachable in `n`'s subtree
+- Unscored rows are invisible; scored nodes under unscored parents
+  compete as roots.
 
 **Decide** (Thompson sampling; one seeded draw per node per round):
 1. Sample every `V_n`: draw each `X_n`, max with `B_n`, child samples.
 2. Walk from root: expand `n` if its fresh draw beats all children's
-   samples; else step to the best child.
+   samples; else step to the best child. Ties break by lower id.
 3. Stop on budget exhaustion.
 
 **Behavior** (selection frequency over rounds; one draw fluctuates):
-- No children: selected by score on average; tails add exploration.
+- No children: selected by score on average; tails add exploration
+  (once gains exist; before that, best score wins).
 - Flat children: tight spread samples low every draw ⇒ rarely selected.
 - Improving child: high mean, broad spread ⇒ often selected.
 - Several live shots: more draws per round ⇒ higher max ⇒ selected more.
@@ -72,7 +79,8 @@ working-dir/              # --working-dir DIR, per run
     └── …
 ```
 
-- `tree.db`: SQLite WAL. `score NULL` = unevaluated.
+- `tree.db`: SQLite WAL. `score NULL` = no score (unevaluated or
+  failed eval); NULL rows are invisible to selection.
 
 ```sql
 CREATE TABLE nodes(
@@ -85,16 +93,18 @@ CREATE TABLE nodes(
 CREATE INDEX idx_parent ON nodes(parent);
 ```
 - Claim: `UPDATE … SET claimed=1 WHERE id=? AND claimed=0`, winner
-  reads rowcount. Dedup: `INSERT OR IGNORE` on `sha`.
+  reads rowcount. Release owns clearing; recording never does.
+  Dedup: `INSERT OR IGNORE` on `sha`.
 - `nodes/{sha}<suffix>`: raw code (suffix from seed), tmp+rename writes.
   Seed is row 1.
+- `meta`: `round` counter (every scoring bumps it), `seed_suffix`.
 - Working dir holds `tree.db` + `nodes/`; this repo holds neither.
-- History: `history` table via triggers (`claimed` flips excluded).
-  State at R = latest rows with `round <= R`.
+- History: explicit `history` writes on scoring (`claimed` flips
+  excluded). State at R = latest rows with `round <= R`.
 - Tests: same schema on `:memory:`.
 - Ceiling: one machine. Later backends keep the `claimed/score/parent`
   columns.
 
 ## Status
 
-v0: this README. Code to follow.
+v0: serial worker, manual concurrent launch. `--workers` deferred.

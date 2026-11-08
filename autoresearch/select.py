@@ -19,12 +19,12 @@ def sigma0(rows: list[sqlite3.Row]) -> float | None:
     if not gains:
         return None
     if len(gains) == 1:
-        return abs(gains[0])
+        return gains[0] ** 2
     return statistics.pvariance(gains)
 
 
 def posterior(
-    node_score: float, child_scores: list[float], spread: float
+    node_score: float, child_scores: list[float], variance: float
 ) -> tuple[float, float, int]:
     k = len(child_scores)
     mu = (node_score + sum(child_scores)) / (1 + k)
@@ -32,7 +32,7 @@ def posterior(
     mean = sum(child_scores) / k if k else node_score
     scatter = sum((s - mean) ** 2 for s in child_scores)
     pull = k * (mean - node_score) ** 2 / (1 + k)
-    sigma = math.sqrt((2 * spread**2 + scatter + pull) / nu)
+    sigma = math.sqrt((2 * variance + scatter + pull) / nu)
     return mu, sigma, nu
 
 
@@ -89,6 +89,6 @@ def select(
         if not child_ids:
             return int(node["id"])
         top = max(child_ids, key=lambda c: (potentials[c], -c))
-        if draws[int(node["id"])] >= potentials[top]:
+        if draws[int(node["id"])] > potentials[top]:
             return int(node["id"])
         node = by_id[top]

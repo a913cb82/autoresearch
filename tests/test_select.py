@@ -32,10 +32,20 @@ class TestSelect(unittest.TestCase):
         return conn, ids
 
     def test_posterior_math(self) -> None:
-        mu, sigma, nu = select.posterior(0.8, [0.81, 0.79], 0.05)
+        mu, sigma, nu = select.posterior(0.8, [0.81, 0.79], 0.0025)
         self.assertAlmostEqual(mu, 0.8)
         self.assertAlmostEqual(sigma, math.sqrt(0.0013))
         self.assertEqual(nu, 4)
+
+    def test_sigma0_returns_variance(self) -> None:
+        conn, _ = self._tree([(None, 0.0, b"r"), (0, 3.0, b"a"), (0, 4.0, b"b")])
+        spread = select.sigma0(db.all_rows(conn))
+        assert spread is not None
+        self.assertAlmostEqual(spread, 0.25)
+        conn2, _ = self._tree([(None, 1.0, b"r"), (0, 4.0, b"a")])
+        single = select.sigma0(db.all_rows(conn2))
+        assert single is not None
+        self.assertAlmostEqual(single, 9.0)
 
     def test_cold_start_returns_root(self) -> None:
         conn, ids = self._tree([(None, 0.5, b"root")])

@@ -47,7 +47,9 @@ class TestDb(unittest.TestCase):
         db.record_score(self.conn, node_id, 0.5)
         row = db.all_rows(self.conn)[0]
         self.assertEqual(row["score"], 0.5)
-        self.assertEqual(row["claimed"], 0)
+        self.assertEqual(row["claimed"], 1)
+        db.release(self.conn, node_id)
+        self.assertTrue(db.claim(self.conn, node_id))
         self.assertEqual(db.meta_get(self.conn, "round"), "1")
         state = db.state_at(self.conn, 1)
         self.assertEqual(len(state), 1)
@@ -58,14 +60,6 @@ class TestDb(unittest.TestCase):
         db.record_score(self.conn, node_id, None)
         self.assertIsNone(db.all_rows(self.conn)[0]["score"])
         self.assertEqual(db.meta_get(self.conn, "round"), "1")
-
-    def test_children_ordered(self) -> None:
-        root, _ = db.add_node(self.conn, self.nodes, ".py", None, b"root")
-        db.add_node(self.conn, self.nodes, ".py", root, b"c1")
-        db.add_node(self.conn, self.nodes, ".py", root, b"c2")
-        kids = db.children(self.conn, root)
-        self.assertEqual([k["score"] for k in kids], [None, None])
-        self.assertEqual([k["id"] for k in kids], [2, 3])
 
     def test_state_at_reconstructs_rounds(self) -> None:
         root, _ = db.add_node(self.conn, self.nodes, ".py", None, b"root")

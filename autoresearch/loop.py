@@ -103,11 +103,13 @@ def iterate(
 
 
 def ensure_seed(
-    conn: sqlite3.Connection, workdir: Path, seed: bytes, eval_exe: str
+    conn: sqlite3.Connection,
+    workdir: Path,
+    seed: bytes,
+    eval_exe: str,
+    suffix: str,
 ) -> int:
     sha = hashlib.sha256(seed).hexdigest()
-    suffix = db.meta_get(conn, "seed_suffix")
-    assert suffix is not None
     roots = [r for r in db.all_rows(conn) if r["parent"] is None]
     if any(str(r["sha"]) != sha for r in roots):
         raise SystemExit("working dir seed differs from --starter")
@@ -118,7 +120,9 @@ def ensure_seed(
     if same:
         target = int(same[0]["id"])
     else:
+        assert not roots
         target, _ = db.add_node(conn, workdir / "nodes", suffix, None, seed)
+        assert target == 1
     score = run_eval(eval_exe, db.node_path(workdir / "nodes", suffix, sha))
     if score is None:
         raise SystemExit("seed failed to score")
@@ -134,7 +138,8 @@ def run(
     rng: random.Random,
     max_evals: int,
     template: str,
-) -> None:
+) -> bool:
     while int(db.meta_get(conn, "round") or 0) < max_evals:
         if not iterate(conn, workdir, eval_exe, model, rng, template):
-            return
+            return False
+    return True

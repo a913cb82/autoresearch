@@ -86,7 +86,7 @@ def meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
 
 
 def record_score(conn: sqlite3.Connection, node_id: int, score: "float | None") -> None:
-    conn.execute("UPDATE nodes SET score=?, claimed=0 WHERE id=?", (score, node_id))
+    conn.execute("UPDATE nodes SET score=? WHERE id=?", (score, node_id))
     row = conn.execute(
         "SELECT sha, parent FROM nodes WHERE id=?", (node_id,)
     ).fetchone()
@@ -113,12 +113,6 @@ def best(conn: sqlite3.Connection) -> "sqlite3.Row | None":
         "SELECT * FROM nodes WHERE score IS NOT NULL "
         "ORDER BY score DESC, id ASC LIMIT 1"
     ).fetchone()
-
-
-def children(conn: sqlite3.Connection, node_id: int) -> "list[sqlite3.Row]":
-    return conn.execute(
-        "SELECT * FROM nodes WHERE parent=? ORDER BY id", (node_id,)
-    ).fetchall()
 
 
 def all_rows(conn: sqlite3.Connection) -> "list[sqlite3.Row]":

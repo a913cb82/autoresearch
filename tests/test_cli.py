@@ -1,7 +1,7 @@
 import io
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from autoresearch import cli, db, read
@@ -21,7 +21,7 @@ class TestCli(unittest.TestCase):
             self.seed,
             "--evaluate",
             str(FIXTURES / "eval_len.py"),
-            "--seed",
+            "--rng-seed",
             "0",
             "--max-evals",
             "2",
@@ -44,7 +44,20 @@ class TestCli(unittest.TestCase):
             self.assertEqual(read.main(["--working-dir", self.work]), 0)
         self.assertIn("4.0", out.getvalue())
 
+    def test_converged_reports(self) -> None:
+        args = self.base[: self.base.index("--max-evals") + 1] + [
+            "3",
+            "--model",
+            "m",
+        ]
+        err = io.StringIO()
+        with fixture_pi("const"), redirect_stderr(err):
+            self.assertEqual(cli.main(args), 0)
+        self.assertIn("converged", err.getvalue())
+
     def test_read_empty(self) -> None:
+        conn = db.connect(self.work)
+        conn.close()
         self.assertEqual(read.main(["--working-dir", self.work]), 1)
 
 

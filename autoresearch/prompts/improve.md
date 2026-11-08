@@ -1,3 +1,5 @@
+Rewrite the code below to score higher. Higher is better.
+
 Parent score: __PARENT_SCORE__
 
 ```
