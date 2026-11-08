@@ -54,12 +54,12 @@ new.
 - `V_n = max(B_n, X_n, best child V)`
 - Descendants shape worth here — never the prediction above.
 
-**Decide** (one seeded draw per node per round — definitional to Thompson
-sampling, not a setting):
+**Decide** (Thompson sampling; one seeded draw per node per round):
 1. Sample every `V_n`: draw each `X_n`, max with `B_n`, child samples.
 2. Walk from root: expand `n` if its fresh draw beats all children's
    samples; else step to the best child.
-3. Stop on budget exhaustion. Past scores never compete.
+3. Stop on budget exhaustion. Only new expansions compete; banked
+   scores route descent but take no action.
 
 **Behavior** (selection frequency over rounds; one draw fluctuates):
 - No children: selected by score on average; tails add exploration.
