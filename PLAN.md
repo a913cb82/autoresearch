@@ -53,13 +53,13 @@ collapses, Tree A → B1, bad-kid root → respawn.
 
 ## 3. `evaluate.py`
 
-`run(eval_exe, path, timeout) -> float | None`: spawn `EVAL <path>`
-(POSIX process group, kill on timeout), first non-empty stdout line
-parses as float else `None`. Nonzero exit or timeout ⇒ `None`
-(unscored, selector-blind). stderr ignored. ~30 lines.
+`run(eval_exe, path) -> float | None`: spawn `EVAL <path>` and wait,
+first non-empty stdout line parses as float else `None`. Nonzero exit
+⇒ `None` (unscored, selector-blind). Timeouts are EVAL's job, not the
+framework's. stderr ignored. ~20 lines.
 
 Tests (`test_evaluate.py`, fixture scripts): exit-0 parse, bad float ⇒
-`None`, nonzero ⇒ `None`, timeout kills, warning lines skipped.
+`None`, nonzero ⇒ `None`, warning lines skipped.
 
 ## 4. `improve.py`
 
@@ -74,7 +74,7 @@ parse, fence strip, bytes passthrough.
 
 ## 5. `loop.py` + `cli.py`
 
-Flags: `--working-dir/--starter/--evaluate/--seed/--max-evals/--timeout`.
+Flags: `--working-dir/--starter/--evaluate/--seed/--max-evals`.
 Step 0: score the seed (fails ⇒ abort). Worker body: select → claim
 (committed before improve) → improve → insert → evaluate → record.
 Orderly failure releases the claim; crashes abandon rows. Budgets read
