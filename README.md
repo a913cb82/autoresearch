@@ -64,8 +64,18 @@ sampling, not a setting):
 
 ## Storage
 
-- `tree.db`: SQLite WAL, stdlib only. `nodes(id, sha UNIQUE, parent,
-  score, claimed)`, index on `parent`. `score NULL` = unevaluated.
+- `tree.db`: SQLite WAL, stdlib only. `score NULL` = unevaluated.
+
+```sql
+CREATE TABLE nodes(
+  id      INTEGER PRIMARY KEY,
+  sha     TEXT UNIQUE NOT NULL,
+  parent  INTEGER REFERENCES nodes(id),
+  score   REAL,
+  claimed INTEGER DEFAULT 0
+);
+CREATE INDEX idx_parent ON nodes(parent);
+```
 - Claim: `UPDATE … WHERE claimed=0`. Dedup: `INSERT OR IGNORE` on `sha`.
 - `nodes/{sha}.py`: raw code; `evaluate` takes the path. Tmp+rename
   writes. Seed is row 1, `parent = NULL`.
