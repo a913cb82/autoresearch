@@ -20,11 +20,9 @@ concurrently:
 
 Best score kept.
 
-Workers: N processes run the loop body; only select+claim is
-transactional. Claims take unclaimed or stale rows (`score NULL AND
-claimed < now − stale`, staleness ≈ 2× eval timeout). A worker prefers
-evaluating an existing unscored child over generating new. Orderly
-failure releases the claim; crashes converge via staleness.
+Workers: N processes run the loop body. Selection claims atomically;
+stale claims are retried, unscored orphans evaluated before generating
+new.
 
 ## Selection
 
