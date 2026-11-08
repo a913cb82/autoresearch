@@ -64,13 +64,13 @@ sampling, not a setting):
 
 ## Storage
 
-| What | Detail |
-|---|---|
-| `tree.db` | SQLite WAL, stdlib only. `nodes(id, sha UNIQUE, parent, score, claimed)`, index on `parent`. `score NULL` = unevaluated |
-| atomic ops | claim: `UPDATE … WHERE claimed=0`; dedup: `INSERT OR IGNORE` on `sha` |
-| `nodes/{sha}.py` | raw code; `evaluate` takes the path; tmp+rename writes; seed is row 1, `parent = NULL` |
-| git / tests | commit per keep; same schema on `:memory:` |
-| ceiling | one machine; later backends keep `claim/score/children` |
+- `tree.db`: SQLite WAL, stdlib only. `nodes(id, sha UNIQUE, parent,
+  score, claimed)`, index on `parent`. `score NULL` = unevaluated.
+- Claim: `UPDATE … WHERE claimed=0`. Dedup: `INSERT OR IGNORE` on `sha`.
+- `nodes/{sha}.py`: raw code; `evaluate` takes the path. Tmp+rename
+  writes. Seed is row 1, `parent = NULL`.
+- Git commits per keep. Tests use the same schema on `:memory:`.
+- Ceiling: one machine. Later backends keep `claim/score/children`.
 
 ## Non-goals
 
