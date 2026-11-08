@@ -2,10 +2,10 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.5
     hooks:
-      - id: ruff-lint
+      - id: ruff
       - id: ruff-format
   - repo: https://github.com/astral-sh/ty-pre-commit
-    rev: 0.0.96
+    rev: v0.0.99
     hooks:
       - id: ty
   - repo: https://github.com/pre-commit/pre-commit-hooks
