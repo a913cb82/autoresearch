@@ -1,6 +1,7 @@
 # Plan (v0)
 
-Each phase: tests → code → hooks → commit → push.
+Each phase: tests → code → hooks → commit → push. Short transactions
+everywhere; no transaction is ever held across improve/evaluate.
 
 ## 1. `db.py`
 
@@ -12,69 +13,84 @@ CREATE TABLE nodes(
   parent INTEGER REFERENCES nodes(id), score REAL,
   claimed INTEGER DEFAULT 0);
 CREATE INDEX idx_parent ON nodes(parent);
--- history(round,id,sha,parent,score) via triggers (claimed excluded)
--- meta(key,value): round counter
+-- history(round,id,sha,parent,score): written explicitly, no triggers
+-- meta(key,value): round counter (round = evaluation attempts), seed_suffix
 ```
 
-Functions: `add_node(parent, code: bytes) -> (id, sha)` (tmp+rename +
-`INSERT OR IGNORE`), `claim(id, now) -> bool`, `record_score(id, score)`
-(score + history + round bump, one txn), `children(id)`, `all_rows()`.
-`node_path(sha)` for file paths.
+Functions: `add_node(parent, code: bytes) -> (id, is_new)` (tmp+rename +
+`INSERT OR IGNORE`; on sha hit, SELECT the existing id — `lastrowid` is
+stale on ignore), `claim(id) -> bool`
+(`UPDATE … SET claimed=1 WHERE id=? AND claimed=0`, winner reads
+rowcount), `release(id)`, `record_score(id, score|None)` (UPDATE nodes +
+INSERT history + meta bump, one txn, in that order), `children(id)`
+(raw rows — filtering is select's job), `all_rows()`.
+`node_path(sha)` appends the seed suffix from `meta`.
+Dedup-hit scored ⇒ reuse row, skip eval. Dedup-hit unscored ⇒ adopt it
+(evaluate now). Failed evals still bump round (work was spent).
 
-Tests (`test_db.py`, `:memory:`): dedup collapse, double-claim one
-winner, score+round atomic, children query, state-at-R via history.
+Tests (`test_db.py`, `:memory:` except one tmpdir two-process claim
+race): dedup collapse + id SELECT, double-claim one winner, score+round
+atomic, children query, state-at-R, `:memory:` asserts no WAL.
 
 ## 2. `select.py`
 
-Pure functions, no I/O. Seeded RNG in, node id out.
+Pure functions, no I/O. Candidates = scored nodes only (NULL rows are
+invisible). Seeded RNG in, ranked id list out (worker claims down the
+list until one wins).
 
-- `sigma0(rows)`: variance of all `child − parent` gains (needs ≥2 gains;
-  before that, skip selection — expand root).
+- `sigma0(rows)`: 0 gains ⇒ only root exists ⇒ return root; 1 gain ⇒
+  `|g|`; ≥2 ⇒ `statistics.pvariance`. Zero spread allowed (point mass).
 - `posterior(node, children)`: `(μ, σ, ν)` per README.
-- `sample_X(rng, μ, σ, ν)`: `μ + σ√(1+1/κ)·Z/√(V/ν)`, `Z` normal,
-  `V` chi-square via `random.gammavariate`.
-- `select(rng, rows) -> id`: bottom-up V sample, descend from root
-  (`x_n ≥ max child v` ⇒ expand `n`).
+- `sample_X(rng, μ, scale, nu)`: caller precomputes
+  `scale = σ√(1+1/(1+k))`; chi-square via
+  `random.gammavariate(nu/2, 2.0)`.
+- `select(rng, rows, sampler=sample_X) -> [ids]`: bottom-up V sample,
+  descend from root (`x_n ≥ max child v` ⇒ expand `n`), full ranking.
 
-Tests (`test_select.py`, fixed tiny trees, hand-computed μ/σ): cold-start
-is prior, flat line collapses, Tree A → B1, bad-kid root → respawn.
+Tests (`test_select.py`, fixed tiny trees, hand-computed μ/σ): posterior
+asserted directly, fixed draws injected; cold-start is prior, flat line
+collapses, Tree A → B1, bad-kid root → respawn.
 
 ## 3. `evaluate.py`
 
-`run(eval_exe, path, timeout) -> float | None`: spawn
-`EVAL <path>`, first stdout line parses as float, else `None`. Nonzero
-exit or timeout ⇒ `None` (unscored, selector-blind). ~30 lines.
+`run(eval_exe, path, timeout) -> float | None`: spawn `EVAL <path>`
+(POSIX process group, kill on timeout), first non-empty stdout line
+parses as float else `None`. Nonzero exit or timeout ⇒ `None`
+(unscored, selector-blind). stderr ignored. ~30 lines.
 
 Tests (`test_evaluate.py`, fixture scripts): exit-0 parse, bad float ⇒
-`None`, nonzero ⇒ `None`, timeout kills.
+`None`, nonzero ⇒ `None`, timeout kills, warning lines skipped.
 
 ## 4. `improve.py`
 
-`improve(endpoint, model, priors_text, code: bytes) -> bytes`:
-`urllib` POST to OpenAI-compatible `/chat/completions`, prompt =
-metrics + prior code + current code + "reply with the complete file,
-nothing else". Response body written verbatim.
+`improve(code: bytes, parent_code, best_code) -> bytes`: `urllib` POST
+to `$OPENAI_BASE_URL/chat/completions` (`$OPENAI_API_KEY`,
+`$OPENAI_MODEL`), prompt = parent + best + current code with "reply
+with the complete file, nothing else". Parse JSON envelope, take
+`choices[0].message.content`, strip ``` fences, return remainder bytes.
 
-Tests (`test_improve.py`, mocked HTTP): prompt contents, bytes
-passthrough.
+Tests (`test_improve.py`, mocked HTTP): prompt contents, envelope
+parse, fence strip, bytes passthrough.
 
 ## 5. `loop.py` + `cli.py`
 
-Worker body: select → claim → improve → insert → evaluate → record.
-Orderly failure releases the claim; crashes abandon rows.
-`--max-evals`, `--max-time`, `--seed`, `--timeout`, `--model`;
-`best.py` always written. Fresh = `rm -rf DIR` (no flag). One worker;
-N workers = N processes.
+Flags: `--working-dir/--starter/--evaluate/--seed/--max-evals/--timeout`.
+Step 0: score the seed (fails ⇒ abort). Worker body: select → claim
+(committed before improve) → improve → insert → evaluate → record.
+Orderly failure releases the claim; crashes abandon rows. Budgets read
+from `meta` (shared across processes; overshoot ≤ worker count
+accepted). Best sha+score printed to stdout.
 
-Tests (`test_loop.py`, fake eval e.g. byte-length score): 3-round run
-grows the tree, budgets stop, best written.
+Tests (`test_loop.py`, fake eval e.g. byte-length score): 5-round run
+(reaches selection past the 2-gain bootstrap), budgets stop, best
+printed.
 
 ## 6. Smoke
 
-`examples/tictactoe/`: seed player + eval executable. One 20-eval run:
-score climbs, tree reads sane.
+Fake-eval CLI run (byte-length): tree grows, scores recorded, best
+printed, history replays state-at-R. No example game.
 
 ## Deferred
 
-Diff edits, `--target-score`, `--quiet`, model tiers, split worker
+Diff edits, `--max-time`, `--quiet`, model tiers/flags, split worker
 roles, `--workers` flag, MAD spread, git anything, docs beyond README.

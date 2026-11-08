@@ -84,8 +84,8 @@ CREATE TABLE nodes(
 );
 CREATE INDEX idx_parent ON nodes(parent);
 ```
-- Claim: single `UPDATE … SET claimed=1 WHERE claimed=0`. Dedup:
-  `INSERT OR IGNORE` on `sha`.
+- Claim: `UPDATE … SET claimed=1 WHERE id=? AND claimed=0`, winner
+  reads rowcount. Dedup: `INSERT OR IGNORE` on `sha`.
 - `nodes/{sha}<suffix>`: raw code (suffix from seed), tmp+rename writes.
   Seed is row 1.
 - Working dir holds `tree.db` + `nodes/`; this repo holds neither.
