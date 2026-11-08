@@ -58,8 +58,7 @@ new.
 1. Sample every `V_n`: draw each `X_n`, max with `B_n`, child samples.
 2. Walk from root: expand `n` if its fresh draw beats all children's
    samples; else step to the best child.
-3. Stop on budget exhaustion. Only new expansions compete; banked
-   scores route descent but take no action.
+3. Stop on budget exhaustion.
 
 **Behavior** (selection frequency over rounds; one draw fluctuates):
 - No children: selected by score on average; tails add exploration.
