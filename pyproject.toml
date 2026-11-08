@@ -11,6 +11,8 @@ autoresearch = "autoresearch.cli:main"
 [tool.ruff]
 target-version = "py311"
 line-length = 88
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
 
 [build-system]
