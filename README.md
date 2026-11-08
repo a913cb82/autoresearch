@@ -4,77 +4,73 @@ Evolve code against a score. You bring the exam; the loop brings the search.
 
 ## Contract
 
-1. `evaluate(filepath: str) -> float` — your scoring function. Deterministic.
-2. A seed file — starting code. Its score is the root of the tree.
+- `evaluate(filepath: str) -> float` — scores a file. Deterministic: same
+  file, same score.
+- A seed file — the starting code. Its score is the tree root.
 
 ## Loop
 
-Forever, serially:
+Serial, until budgets run out:
 
-1. **Select** — pick the node to expand (rule below).
-2. **Improve** — an agent rewrites the node's code to maximize the score.
-3. **Score** — run `evaluate`, attach the child to the tree with its score.
+1. Select a node (rule below).
+2. An agent rewrites that node's code to raise the score.
+3. Score the rewrite with `evaluate`; attach it as a child with its score.
 
-Best score is kept. Budgets stop the loop.
+Best score kept.
 
-## Selection rule
+## Selection
 
-A tree of evaluated programs. Node `n` has score `s_n` and `k ≥ 0`
-evaluated children scoring `s_1…s_k` (`k` is that count).
-`best` = highest score in the tree.
+Tree of scored programs. Node `n` has score `s_n` and `k` children
+scoring `s_1…s_k`. `best` = top score in the tree.
 
-**Population level.** Pool every gain `g = child − parent` from every
-evaluated child in the tree. `σ₀²` = variance of that pool: how much
-mutations wobble.
+**Population.** Collect every `child − parent` gain in the tree.
+`σ₀²` = their variance: typical mutation wobble.
 
-**Node level.** For node `n` as a parent, with unknown child-mean `θ_n`
-and child-spread `σ²_n`. Only direct children enter — they alone drew
-from `n`'s launchpad:
-* Prior: `θ_n ~ N(s_n, σ₀²)`, worth 1 pseudo-child — children resemble
-  their parent (1 is the smallest sample with a mean).
-* Prior: `σ²_n ~ InvGamma` centered at `σ₀²`, worth 2 pseudo-observations —
-  children wobble like the population until the node's own children say
-  otherwise (2 is the smallest sample with a variance).
-* Likelihood: each child `s_i ~ N(θ_n, σ²_n)`.
+**Per node.** Only direct children count — they alone started from its
+score. With unknown child-mean `θ_n` and child-spread `σ²_n`:
+- Prior: `θ_n ~ N(s_n, σ₀²)`, weight 1 — children resemble their parent
+  (1 is the smallest sample with a mean).
+- Prior: `σ²_n ~ InvGamma` around `σ₀²`, weight 2 — children wobble like
+  the population until proven otherwise (2 is the smallest sample with
+  a spread).
+- Likelihood: children `~ N(θ_n, σ²_n)`.
 
-**Posterior** (closed form). Evidence counters `κ = 1+k` (weight behind
-the mean) and `ν = 2+k` (weight behind the spread):
-* `μ = (s_n + Σs_i)/κ`
-* `νσ² = 2σ₀² + Σ(sᵢ−x̄)² + k(x̄−s_n)²/κ`
-* Next child of `n`, `X_n` `~ Student-t(ν, μ, σ√(1+1/κ))` — derived, not
-  chosen: integrating a Normal likelihood over the conjugate posterior
-  evaluates exactly to Student-t. Small `ν` (unexplored) ⇒ heavy tails ⇒
-  optimism; large `ν` (well-sampled) ⇒ near-Normal ⇒ estimates at face
-  value.
+**Posterior** (exact math, no approximation):
+- `μ = (s_n + Σs_i)/(1+k)`
+- `σ²` from `(2+k)σ² = 2σ₀² + Σ(sᵢ−x̄)² + k(x̄−s_n)²/(1+k)`
+- Next-child prediction `X_n ~ Student-t(2+k, μ, σ√(1+1/(1+k)))`.
+  t, not Normal, because spread is learned too: few children ⇒ heavy
+  tails ⇒ optimism; many ⇒ near-Normal ⇒ trust the estimates.
 
-**Potential.** `V_n` = best score achievable in `n`'s subtree, including
-unexpanded future. `B_n` = best evaluated score at/below `n` (exact).
-Bottom-up, leaves first: `V_n = max(B_n, X_n, max_c V_c)` over children
-`c`. Children's potentials enter only here — they route *through* `n`
-without corrupting its launchpad.
+**Potential.** `V_n` = best score reachable in `n`'s subtree.
+`B_n` = best scored node at/below `n` (exact). Bottom-up, leaves first:
+`V_n = max(B_n, X_n, best child V)`. Descendants shape worth here —
+never the prediction above.
 
-**Selection (Thompson).** One draw per round, seeded RNG (reproducible):
-sample every `V_n` bottom-up (draw each `X_n`, max with `B_n` and
-children's samples). Then descend from the root: at node `n`, if its
-fresh sample `x_n ≥ max_c v_c` over children, **expand `n`**; else recurse
-to `argmax_c v_c`. `B_n` never competes — banked past, not an action.
-Stop on budget exhaustion. In one sentence: sample the RVs, follow the
-max down, expand where fresh beats below.
+**Decide.** One seeded random draw per round (reproducible):
+- Sample every `V_n` bottom-up: draw each `X_n`, max with `B_n` and child
+  samples.
+- Walk down from the root: expand `n` if its fresh draw beats all
+  children's samples; else step to the best child. Past scores never
+  compete — only a new expansion can score.
+- Stop on budget exhaustion.
 
-**Reading it.** No children ⇒ posterior equals prior, so unexplored nodes
-are naturally optimistic. Flat children ⇒ mean pins to their level and
-spread collapses, so the node deselects itself. A climbing child ⇒ mean
-rises while spread stays broad, so the node stays attractive. A subtree
-with many live shots outranks one peak.
+In one sentence: sample what each subtree could become, follow the max
+down, expand where fresh beats below.
 
-**Numbers.** Fixed indifference defaults, never tuned: prior strengths 1
-and 2. Learned from data: `σ₀` global; `μ`, `σ` per node. No other knobs.
+**Behavior.** No children ⇒ prediction equals prior: unexplored nodes are
+optimistic. Flat children ⇒ mean pins to their level, spread collapses:
+dead nodes deselect themselves. A climbing child ⇒ mean rises, spread
+stays broad: live nodes stay attractive. Many live shots outrank one
+peak.
 
-## Non-goals (v0)
+**Numbers.** Fixed, never tuned: weights 1 and 2. Learned: `σ₀` globally;
+`μ`, `σ` per node. Nothing else.
 
-No concurrency, no population grids, no islands, no LLM judges.
-One loop, one exam, one tree.
+## Non-goals
+
+No concurrency, grids, islands, judges. One loop, one exam, one tree.
 
 ## Status
 
-v0: this README. Loop implementation to follow.
+v0: this README. Code to follow.
