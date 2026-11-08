@@ -1,0 +1,13 @@
+[project]
+name = "autoresearch"
+version = "0.1.0"
+description = "Evolve code against a score"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+autoresearch = "autoresearch.cli:main"
+
+[build-system]
+requires = ["flit_core"]
+build-backend = "flit_core.buildapi"

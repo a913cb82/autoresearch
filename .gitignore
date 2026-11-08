@@ -2,3 +2,7 @@
 *-shm
 __pycache__/
 tree.db
+.venv/
+dist/
+build/
+*.egg-info/
