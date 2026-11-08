@@ -17,7 +17,7 @@ def main(argv: "list[str] | None" = None) -> int:
     conn.row_factory = sqlite3.Row
     best = db.best(conn)
     if best is None:
-        print("no scored nodes", file=sys.stderr)
+        print(f"no scored nodes in {workdir}", file=sys.stderr)
         return 1
     path = db.node_path(workdir / "nodes", str(best["sha"]))
     print(f"{path} {best['score']}")

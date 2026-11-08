@@ -60,11 +60,12 @@ class TestSelect(unittest.TestCase):
         conn, ids = self._tree([(None, 0.5, b"root"), (0, None, b"broken")])
         self.assertEqual(select.select(random.Random(0), db.all_rows(conn)), ids[0])
 
-    def test_orphan_subtree_competes(self) -> None:
-        conn, ids = self._tree(
+    def test_orphan_parent_errors(self) -> None:
+        conn, _ = self._tree(
             [(None, 0.5, b"root"), (0, None, b"broken"), (1, 0.9, b"star")]
         )
-        self.assertEqual(select.select(random.Random(0), db.all_rows(conn)), ids[2])
+        with self.assertRaises(AssertionError):
+            select.select(random.Random(0), db.all_rows(conn))
 
     def test_mean_sampler_greedy_deepens_best_leaf(self) -> None:
         conn, ids = self._tree(

@@ -13,9 +13,10 @@ CREATE TABLE nodes(
   parent INTEGER REFERENCES nodes(id), score REAL,
   claimed INTEGER DEFAULT 0);
 CREATE TABLE meta(
-  key TEXT PRIMARY KEY CHECK(key IN ('round')),
+  key TEXT PRIMARY KEY CHECK(key IN ('round', 'evaluate')),
   value TEXT);
--- meta.round: evaluation attempts (dupes burn attempts without rows)
+-- meta.round: rewrite attempts (seed setup excluded)
+-- meta.evaluate: absolute EVAL path (match-or-omit on resume)
 ```
 
 Functions: `add_node(parent, code: bytes) -> (id, is_new)` (tmp+rename +
@@ -71,17 +72,21 @@ in code can't collide), pipe to `pi --print -nt` (on PATH) via stdin;
 stdout taken verbatim as the new file. `--model` passes through
 verbatim.
 
-Flags: `--working-dir/--initial/--evaluate/--seed/--max-evals`
+Flags: `--working-dir/--initial/--evaluate/--seed/--max-rewrites`
+(`--initial/--evaluate` optional on resume, required fresh).
 plus `--model` (forwarded to `pi --print`).
-Step 0: checksum `--initial`; if a root row's sha differs, abort (two
+Step 0: resolve `--initial` (omitted ⇒ read the root file out of the
+tree; zero/ambiguous roots abort) and `--evaluate` (omitted ⇒ stored
+path or abort; specified ⇒ normalize and compare, mismatch aborts;
+fresh run stores it). Checksum the seed; divergent root aborts (two
 seeds, one tree). Same sha scored ⇒ resume. Else insert as row 1 and
 score (fails ⇒ abort). CLI exports `--seed` as `AUTORESEARCH_SEED`
 before running (workers inherit via fork). Worker body per pass: select → claim (lost ⇒
 pass, next pass redraws) → improve → insert → new? evaluate + record
 : spend one round, drop. Every improve advances `round` exactly once;
 contention passes cost nothing. Improve failure propagates loudly.
-Crashes abandon rows. Budgets read from `meta` (seed scoring consumes
-budget; shared across processes; overshoot ≤ worker count accepted).
+Crashes abandon rows. Budgets read from `meta` (seed setup excluded;
+shared across processes; overshoot ≤ worker count accepted).
 Exit at budget. `worker()` (same body, own connection, `seed + i`)
 is the multiprocess entry; `--workers W` spawns W of them, fails
 loudly on nonzero exits.

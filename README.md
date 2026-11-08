@@ -6,10 +6,12 @@ Searches code improvements against a user-supplied scoring function.
 
 ### Run
 ```bash
-autoresearch --working-dir DIR --initial INITIAL --evaluate EVAL --max-evals M --model MODEL [--seed N --workers W]
+autoresearch --working-dir DIR --initial INITIAL --evaluate EVAL --max-rewrites M --model MODEL [--seed N --workers W]
 ```
 - `EVAL`: executable. Called as `EVAL <filepath>` (`AUTORESEARCH_SEED` in the environment); returns the score to stdout.
 - `INITIAL`: starting file.
+- Running in an existing working-dir restores the previous run
+  - `--initial` and `--evaluate` must either match or not be specified, budget is from resume point onwards
 
 ### Read results
 ```bash
@@ -20,9 +22,9 @@ autoresearch-read --working-dir DIR
 
 Until the budget runs out:
 
-1. Select a node (atomic claim).
-2. Agent rewrites its code to raise the score.
-3. Score the rewrite; attach as a child (unless identical code exists).
+1. Select a previously scored candidate.
+2. pi coding agent rewrites code.
+3. Score the rewrite.
 
 ### Concurrency
 
@@ -34,14 +36,13 @@ For node `n` with score `s_n` and children `c_1…k` scoring `s_1…s_k`:
 
 **Priors** (direct children):
 - `σ₀²` is the variance of all `child − parent` gains.
-- `σ²_n ~ InvGamma` around `σ₀²`, weight 2 (smallest sample with a spread).
-- `θ_n`, `σ²_n` are `n`'s unknown child-mean and child-spread.
-- Prior: `θ_n ~ N(s_n, σ₀²)`, weight 1 (smallest sample with a mean).
+- `σ²_n ~ InvGamma(1, σ₀²)`: 2 observations at `σ₀²`.
+- `θ_n | σ²_n ~ N(s_n, σ²_n)`: 1 observation at `s_n`.
 - Likelihood: each observed child score `s_i ~ N(θ_n, σ²_n)`.
 
 **Posterior** (exact):
 - `μ = (s_n + Σs_i)/(1+k)`
-- `(2+k)σ² = 2σ₀² + Σ(sᵢ−x̄)² + k(x̄−s_n)²/(1+k)`
+- `(2+k)σ² = 2σ₀² + Σ(sᵢ−x̄)² + k(x̄−s_n)²/(1+k)` (`x̄` = mean of child scores, `s_n` when childless)
 - `X_n ~ Student-t(2+k, μ, σ√(1+1/(1+k)))`
 - `X_n` predicts the score of the next child of `n`
 
@@ -49,14 +50,12 @@ For node `n` with score `s_n` and children `c_1…k` scoring `s_1…s_k`:
 - `B_n` is the best scored node at/below `n`
 - `V_n = max(B_n, X_n, max child V)`
 - `V_n` is the best score reachable in `n`'s subtree
-- Unscored rows are invisible; scored nodes under unscored parents
-  compete as roots.
+- Unscored rows are ignored.
 
 **Decide** (Thompson sampling; one seeded draw per node per round):
 1. Sample every `V_n`: draw each `X_n`, max with `B_n`, child samples.
-2. Walk from root: expand `n` if its fresh draw beats all children's
-   samples; else step to the best child. Ties break by lower id.
-3. Stop on budget exhaustion.
+2. Walk from root: expand `n` when `X_n > max child V`; else step to
+   the best child. Ties break by lower id.
 
 **Behavior** (selection frequency over rounds; one draw fluctuates):
 - No children: selected by score on average; tails add exploration
@@ -64,8 +63,6 @@ For node `n` with score `s_n` and children `c_1…k` scoring `s_1…s_k`:
 - Flat children: tight spread samples low every draw ⇒ rarely selected.
 - Improving child: high mean, broad spread ⇒ often selected.
 - Several live shots: more draws per round ⇒ higher max ⇒ selected more.
-
-**Numbers.** Fixed: weights 1, 2. Learned: `σ₀` global; `μ`, `σ` per node.
 
 ## Storage
 
@@ -87,7 +84,7 @@ CREATE TABLE nodes(
   claimed INTEGER DEFAULT 0
 );
 CREATE TABLE meta(
-  key TEXT PRIMARY KEY CHECK(key IN ('round')),  -- attempt counter
+  key TEXT PRIMARY KEY CHECK(key IN ('round', 'evaluate')),  -- attempt counter
   value TEXT);
 ```
 

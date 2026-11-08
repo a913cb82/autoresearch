@@ -1,4 +1,4 @@
-"""SQLite store: nodes table, explicit history, meta counter."""
+"""SQLite store: nodes table, meta counter."""
 
 import hashlib
 import os
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS nodes(
   parent INTEGER REFERENCES nodes(id), score REAL,
   claimed INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS meta(
-  key TEXT PRIMARY KEY CHECK(key IN ('round')),
+  key TEXT PRIMARY KEY CHECK(key IN ('round', 'evaluate')),
   value TEXT);
 """
 
@@ -83,9 +83,14 @@ def meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
     conn.commit()
 
 
-def record_score(conn: sqlite3.Connection, node_id: int, score: float) -> None:
+def record_score(
+    conn: sqlite3.Connection, node_id: int, score: float, count: bool = True
+) -> None:
     conn.execute("UPDATE nodes SET score=? WHERE id=?", (score, node_id))
-    spend_round(conn)
+    if count:
+        spend_round(conn)
+    else:
+        conn.commit()
 
 
 def spend_round(conn: sqlite3.Connection) -> None:

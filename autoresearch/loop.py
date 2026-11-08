@@ -110,7 +110,7 @@ def ensure_seed(
         target, _ = db.add_node(conn, workdir / "nodes", None, seed)
         assert target == 1
     score = run_eval(eval_exe, db.node_path(workdir / "nodes", sha))
-    db.record_score(conn, target, score)
+    db.record_score(conn, target, score, count=False)
     return target
 
 
@@ -120,10 +120,10 @@ def run(
     eval_exe: str,
     model: str,
     rng: random.Random,
-    max_evals: int,
+    max_rewrites: int,
     template: str,
 ) -> None:
-    while int(db.meta_get(conn, "round") or 0) < max_evals:
+    while int(db.meta_get(conn, "round") or 0) < max_rewrites:
         iterate(conn, workdir, eval_exe, model, rng, template)
 
 
@@ -132,7 +132,7 @@ def worker(
     eval_exe: str,
     model: str,
     seed: int,
-    max_evals: int,
+    max_rewrites: int,
     template: str,
 ) -> None:
     conn = db.connect(workdir)
@@ -143,7 +143,7 @@ def worker(
             eval_exe,
             model,
             random.Random(seed),
-            max_evals,
+            max_rewrites,
             template,
         )
     finally:

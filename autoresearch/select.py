@@ -53,7 +53,10 @@ def select(
     kids: dict[int, list[int]] = {}
     for r in scored:
         parent = r["parent"]
-        if parent is not None and int(parent) in by_id:
+        if parent is not None:
+            assert int(parent) in by_id, (
+                f"scored node {int(r['id'])} has unscored parent"
+            )
             kids.setdefault(int(parent), []).append(int(r["id"]))
     spread = sigma0(rows)
     if spread is None:
@@ -82,7 +85,7 @@ def select(
 
     for r in scored:
         potential(int(r["id"]))
-    roots = [r for r in scored if r["parent"] is None or int(r["parent"]) not in by_id]
+    roots = [r for r in scored if r["parent"] is None]
     node = max(roots, key=lambda r: (potentials[int(r["id"])], -int(r["id"])))
     while True:
         child_ids = kids.get(int(node["id"]), [])

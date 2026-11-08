@@ -40,12 +40,14 @@ class TestLoop(unittest.TestCase):
         out = loop.render_prompt("A __CURRENT_CODE__ B", {"__CURRENT_CODE__": code})
         self.assertEqual(out, f"A {code} B")
 
-    def _run(self, seed: int, variant: str = "grow", max_evals: int = 5):
+    def _run(self, seed: int, variant: str = "grow", max_rewrites: int = 5):
         work = Path(self.tmp.name) / f"w{seed}"
         conn = db.connect(str(work))
         with fixture_pi(variant):
             loop.ensure_seed(conn, work, b"x", EVAL)
-            loop.run(conn, work, EVAL, "m", random.Random(0), max_evals, self.template)
+            loop.run(
+                conn, work, EVAL, "m", random.Random(0), max_rewrites, self.template
+            )
         rows = [(r["sha"], r["score"]) for r in db.all_rows(conn)]
         round_ = db.meta_get(conn, "round")
         conn.close()
@@ -53,14 +55,14 @@ class TestLoop(unittest.TestCase):
 
     def test_run_grows_tree_and_replays(self) -> None:
         rows, round_ = self._run(1)
-        self.assertEqual(len(rows), 4)
+        self.assertEqual(len(rows), 5)
         self.assertEqual(round_, "5")
         again, _ = self._run(2)
         self.assertEqual(again, rows)
 
     def test_budget_stops(self) -> None:
-        rows, round_ = self._run(3, max_evals=2)
-        self.assertEqual(len(rows), 2)
+        rows, round_ = self._run(3, max_rewrites=2)
+        self.assertEqual(len(rows), 3)
         self.assertEqual(round_, "2")
 
     def test_duplicate_drops_and_burns(self) -> None:

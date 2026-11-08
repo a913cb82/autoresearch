@@ -15,19 +15,19 @@ def _worker_main(
     eval_exe: str,
     model: str,
     seed: int,
-    max_evals: int,
+    max_rewrites: int,
     template: str,
 ) -> None:
-    loop.worker(workdir, eval_exe, model, seed, max_evals, template)
+    loop.worker(workdir, eval_exe, model, seed, max_rewrites, template)
 
 
 def main(argv: "list[str] | None" = None) -> int:
     parser = argparse.ArgumentParser(prog="autoresearch")
     parser.add_argument("--working-dir", required=True)
-    parser.add_argument("--initial", required=True)
-    parser.add_argument("--evaluate", required=True)
+    parser.add_argument("--initial", default=None)
+    parser.add_argument("--evaluate", default=None)
     parser.add_argument("--seed", default=0, type=int)
-    parser.add_argument("--max-evals", required=True, type=int)
+    parser.add_argument("--max-rewrites", required=True, type=int)
     parser.add_argument("--model", required=True)
     parser.add_argument("--workers", default=1, type=int)
     args = parser.parse_args(argv)
@@ -35,19 +35,38 @@ def main(argv: "list[str] | None" = None) -> int:
         parser.error("--workers must be >= 1")
     workdir = Path(args.working_dir)
     conn = db.connect(workdir)
-    initial = Path(args.initial)
-    seed = initial.read_bytes()
-    loop.ensure_seed(conn, workdir, seed, args.evaluate)
+    fresh = not db.all_rows(conn)
+    if fresh and (args.initial is None or args.evaluate is None):
+        parser.error("--initial and --evaluate are required for a fresh working dir")
+    if args.initial is None:
+        roots = [r for r in db.all_rows(conn) if r["parent"] is None]
+        if len(roots) != 1:
+            raise SystemExit("working dir has no single root; pass --initial")
+        seed = db.node_path(workdir / "nodes", str(roots[0]["sha"])).read_bytes()
+    else:
+        seed = Path(args.initial).read_bytes()
+    stored = db.meta_get(conn, "evaluate")
+    if args.evaluate is None:
+        if stored is None:
+            parser.error("--evaluate required: working dir predates stored eval")
+        eval_exe = stored
+    else:
+        eval_exe = str(Path(args.evaluate).absolute())
+        if stored is not None and eval_exe != stored:
+            raise SystemExit("--evaluate differs from the stored run")
+    loop.ensure_seed(conn, workdir, seed, eval_exe)
+    if stored is None:
+        db.meta_set(conn, "evaluate", eval_exe)
     os.environ["AUTORESEARCH_SEED"] = str(args.seed)
     template = loop.TEMPLATE.read_text()
     if args.workers == 1:
         loop.run(
             conn,
             workdir,
-            args.evaluate,
+            eval_exe,
             args.model,
             random.Random(args.seed),
-            args.max_evals,
+            args.max_rewrites,
             template,
         )
         return 0
@@ -58,10 +77,10 @@ def main(argv: "list[str] | None" = None) -> int:
             target=_worker_main,
             args=(
                 str(workdir),
-                args.evaluate,
+                eval_exe,
                 args.model,
                 args.seed + i,
-                args.max_evals,
+                args.max_rewrites,
                 template,
             ),
         )
