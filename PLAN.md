@@ -35,8 +35,7 @@ atomic, children query, state-at-R, `:memory:` asserts no WAL.
 ## 2. `select.py`
 
 Pure functions, no I/O. Candidates = scored nodes only (NULL rows are
-invisible). Seeded RNG in, ranked id list out (worker claims down the
-list until one wins).
+invisible). Seeded RNG in, one node id out.
 
 - `sigma0(rows)`: 0 gains ⇒ only root exists ⇒ return root; 1 gain ⇒
   `|g|`; ≥2 ⇒ `statistics.pvariance`. Zero spread allowed (point mass).
@@ -44,8 +43,9 @@ list until one wins).
 - `sample_X(rng, μ, scale, nu)`: caller precomputes
   `scale = σ√(1+1/(1+k))`; chi-square via
   `random.gammavariate(nu/2, 2.0)`.
-- `select(rng, rows, sampler=sample_X) -> [ids]`: bottom-up V sample,
-  descend from root (`x_n ≥ max child v` ⇒ expand `n`), full ranking.
+- `select(rng, rows, sampler=sample_X) -> id`: bottom-up V sample,
+  descend from root (`x_n ≥ max child v` ⇒ expand `n`). Worker retries
+  on lost claim (fresh draw each try); all-claimed ⇒ exit, nothing to do.
 
 Tests (`test_select.py`, fixed tiny trees, hand-computed μ/σ): posterior
 asserted directly, fixed draws injected; cold-start is prior, flat line
