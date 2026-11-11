@@ -44,14 +44,7 @@ export default function (pi: ExtensionAPI) {
         { path: real, offset: params.offset, limit: params.limit },
         { signal },
       )) as unknown as { result?: { content?: TextBlock[] }; content?: TextBlock[] };
-      const content = nested.result?.content ?? nested.content;
-      if (!content) {
-        return {
-          content: [{ type: "text", text: `Read failed for approved file: ${arg}` }],
-          details: {},
-        };
-      }
-      return { content, details: {} };
+      return { content: nested.result?.content ?? nested.content ?? [], details: {} };
     },
   });
 }

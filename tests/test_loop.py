@@ -229,6 +229,30 @@ class TestLoop(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertEqual(round_, "5")
 
+    def test_improve_ignores_stdout_uses_candidate(self) -> None:
+        work = Path(self.tmp.name) / "wstdout"
+        conn = db.connect(str(work))
+        with fixture_pi("grow"):
+            loop.ensure_seed(conn, work, b"x", EVAL)
+            loop.generate(conn, work, "m", random.Random(0), 1)
+        rows = db.all_rows(conn)
+        self.assertEqual(len(rows), 2)
+        blob = (work / "nodes" / str(rows[1]["sha"])).read_bytes()
+        self.assertTrue(blob.endswith(b"#1\n"))
+        self.assertNotIn(b"JUNK", blob)
+        conn.close()
+
+    def test_improve_missing_candidate_raises(self) -> None:
+        loop.ensure_seed(self.conn, self.work, b"x", EVAL)
+        with fixture_pi("nowrite"):
+            with self.assertRaises(FileNotFoundError):
+                loop.iterate(
+                    self.conn,
+                    self.work,
+                    "m",
+                    random.Random(0),
+                )
+
     def test_improve_failure_raises(self) -> None:
         loop.ensure_seed(self.conn, self.work, b"x", EVAL)
         with fixture_pi("fail"):

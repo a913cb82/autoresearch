@@ -73,17 +73,26 @@ call `prompts/improve.render()` (plain-Python template: parent block
 omitted for roots, reference section omitted without `--read-paths`;
 values are never parsed, so braces/dollars in code can't collide),
 pipe via stdin to
-`pi --print` (on PATH) with `--model` verbatim; stdout taken verbatim
-as the new file. No `--read-paths` ⇒ `-nt` (no tools). With paths ⇒
-`-e read_approved.ts` plus `--tools read_approved,read --no-mcp`:
-a static, checked-in gate (shipped in the package, found via
-`importlib.resources`) in front of pi's own `read`. The gate checks
-`realpath` against `AUTORESEARCH_READ_PATHS` (same env pattern as
-`AUTORESEARCH_SEED`) and denials return model-readable text; allowed
-reads delegate via `ctx.executeTool`, so behavior (offset/limit,
-truncation, images) is the built-in's byte for byte. `read` is
-declared but hidden from the model (`prepareLoadout` +
-`reachesTools`), so the gate is the only read path it sees.
+`pi --print` (on PATH) with `--model` verbatim; the agent saves the
+new file with the `write_candidate` tool and stdout is ignored.
+Two static, checked-in gates (shipped in the package, found via
+`importlib.resources`): `read_approved.ts` in front of pi's own
+`read`, `write_candidate.ts` in front of pi's own `write`, always
+`-e` both with `--tools
+read_approved,read,write_candidate,write --no-mcp`. The
+read gate checks `realpath` against `AUTORESEARCH_READ_PATHS` (same
+env pattern as `AUTORESEARCH_SEED`) and denials return model-readable
+text; allowed reads delegate via `ctx.executeTool`, so behavior
+(offset/limit, truncation, images) is the built-in's byte for byte.
+The write gate takes only `{content}` and writes it to the single
+`AUTORESEARCH_CANDIDATE` path (set per iteration); it delegates to
+the built-in `write`, so mkdir/encoding behavior is identical.
+Both builtins stay declared but hidden from the model
+(`prepareLoadout` + `reachesTools`), so the gates are the only
+read/write paths it sees. A unique `.candidate-*` temp in `nodes/`
+is reserved per pass and removed afterwards; exit 0 without a write
+⇒ `FileNotFoundError`, so fence-wrapped stdout chatter can no longer
+poison the tree.
 
 Flags: `--working-dir/--initial/--evaluate/--seed/--max-rewrites`
 (`--initial/--evaluate` optional on resume, required fresh).
@@ -128,8 +137,9 @@ Test: fixed db, assert output.
 
 Tests (`test_loop.py`, fixture eval + fake-`pi` scripts, fake eval e.g.
 byte-length score): exit-0 parse, bad float/nonzero ⇒ `RuntimeError`, template
-renders fixture code containing braces/dollars intact, stdout
-passthrough, 5-round run (reaches selection past the 2-gain bootstrap),
+renders fixture code containing braces/dollars intact, candidate
+file passthrough with stdout ignored (missing write ⇒ `FileNotFoundError`),
+5-round run (reaches selection past the 2-gain bootstrap),
 budgets stop, const-`pi` burns budget on dupes and ends at budget,
 plus read-paths expansion/argv/prompt tests, plus split-role
 (generator inserts NULL, evaluator scores, drain exits) tests.

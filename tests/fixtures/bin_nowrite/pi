@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""Fixture pi: exits 0 without writing the candidate file."""
+
+import sys
+
+sys.stdout.write("I forgot to call write_candidate\n")

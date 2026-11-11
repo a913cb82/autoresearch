@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Assert the pi argv matches the read-tool contract, then succeed."""
+"""Assert the pi argv matches the tool contract, then write via candidate."""
 
+import os
 import sys
+from pathlib import Path
 
 a = sys.argv[1:]
-if "--tools" in a:
-    tools = a[a.index("--tools") + 1].split(",")
-    assert set(tools) == {"read_approved", "read"}, a
-    assert "--no-mcp" in a, a
-    assert "-e" in a, a
-    assert "-nt" not in a, a
-else:
-    assert "-nt" in a, a
-print("ok")
+tools = a[a.index("--tools") + 1].split(",")
+assert set(tools) == {"read_approved", "read", "write_candidate", "write"}, a
+assert sum(1 for x in a if x == "-e") == 2, a
+assert "--no-mcp" in a, a
+assert "-nt" not in a, a
+Path(os.environ["AUTORESEARCH_CANDIDATE"]).write_text("ok")
+sys.stdout.write("JUNK_STDOUT_SHOULD_BE_IGNORED\n")

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-"""Echo stdin to stdout (lets tests inspect the rendered prompt)."""
+"""Write stdin to the candidate file (lets tests inspect the rendered prompt)."""
 
+import os
 import sys
+from pathlib import Path
 
-sys.stdout.write(sys.stdin.read())
+Path(os.environ["AUTORESEARCH_CANDIDATE"]).write_text(sys.stdin.read())
+sys.stdout.write("JUNK_STDOUT_SHOULD_BE_IGNORED\n")

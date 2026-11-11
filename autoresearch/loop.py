@@ -8,6 +8,7 @@ import os
 import random
 import sqlite3
 import subprocess
+import tempfile
 import time
 from importlib.resources import files
 from pathlib import Path
@@ -68,28 +69,41 @@ def expand_read_paths(entries: list[str]) -> list[str]:
     return sorted({os.path.abspath(p) for p in out})
 
 
-def improve(prompt: str, model: str, read_paths: list[str]) -> bytes:
-    if read_paths:
-        ext = files("autoresearch").joinpath("read_approved.ts")
-        assert ext.is_file(), f"missing shipped tool: {ext}"
-        cmd = [
-            "pi",
-            "--print",
-            "-e",
-            str(ext),
-            "--tools",
-            "read_approved,read",
-            "--no-mcp",
-            "--model",
-            model,
-        ]
-    else:
-        cmd = ["pi", "--print", "-nt", "--model", model]
-    proc = subprocess.run(
-        cmd, input=prompt, capture_output=True, text=True, encoding="utf-8"
-    )
-    proc.check_returncode()
-    return proc.stdout.encode("utf-8")
+def improve(prompt: str, model: str, nodes_dir: Path) -> bytes:
+    read_ext = files("autoresearch").joinpath("read_approved.ts")
+    write_ext = files("autoresearch").joinpath("write_candidate.ts")
+    assert read_ext.is_file(), f"missing shipped tool: {read_ext}"
+    assert write_ext.is_file(), f"missing shipped tool: {write_ext}"
+    cmd = [
+        "pi",
+        "--print",
+        "-e",
+        str(read_ext),
+        "-e",
+        str(write_ext),
+        "--tools",
+        "read_approved,read,write_candidate,write",
+        "--no-mcp",
+        "--model",
+        model,
+    ]
+    fd, tmp = tempfile.mkstemp(dir=nodes_dir, prefix=".candidate-")
+    os.close(fd)
+    candidate = Path(tmp)
+    candidate.unlink()
+    try:
+        proc = subprocess.run(
+            cmd,
+            input=prompt,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env={**os.environ, "AUTORESEARCH_CANDIDATE": tmp},
+        )
+        proc.check_returncode()
+        return candidate.read_bytes()
+    finally:
+        candidate.unlink(missing_ok=True)
 
 
 def _scores(value: float | None) -> str:
@@ -123,7 +137,7 @@ def iterate(
         current_score=str(node["score"]),
         read_paths=paths,
     )
-    new_code = improve(prompt, model, paths)
+    new_code = improve(prompt, model, nodes_dir)
     db.add_node(conn, nodes_dir, node_id, new_code)
 
 

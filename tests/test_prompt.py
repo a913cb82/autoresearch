@@ -36,15 +36,18 @@ class TestPrompt(unittest.TestCase):
         )
         self.assertNotIn("Parent", out)
 
-    def test_reply_forbids_fences(self) -> None:
-        out = render(
-            parent_code=None,
-            parent_score=None,
-            current_code="x\n",
-            current_score="1.0",
-            read_paths=[],
-        )
-        self.assertIn("No markdown fences", out)
+    def test_reply_unconstrained(self) -> None:
+        for paths in ([], ["/a"]):
+            out = render(
+                parent_code=None,
+                parent_score=None,
+                current_code="x\n",
+                current_score="1.0",
+                read_paths=paths,
+            )
+            self.assertIn("write_candidate", out)
+            self.assertNotIn("reply with nothing else", out)
+            self.assertNotIn("No markdown fences", out)
 
     def test_no_read_paths_omits_section(self) -> None:
         out = render(
