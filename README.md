@@ -23,9 +23,8 @@ pi auth
 ### Run
 ```bash
 autoresearch \
-  --working-dir DIR --initial INITIAL --evaluate EVAL \
-  --max-rewrites M --model MODEL \
-  [--seed N --generators G --evaluators E --read-paths PATH]
+  --working-dir DIR --initial INITIAL --evaluate EVAL --max-rewrites M \
+  [--model MODEL --seed N --generators G --evaluators E --read-paths PATH]
 ```
 - `--read-paths`: files the agent may read
 - Running in an existing working-dir restores the previous run

@@ -70,7 +70,7 @@ def expand_read_paths(entries: list[str]) -> list[str]:
     return sorted({os.path.abspath(p) for p in out})
 
 
-def improve(prompt: str, model: str, nodes_dir: Path) -> bytes:
+def improve(prompt: str, model: "str | None", nodes_dir: Path) -> bytes:
     read_ext = files("autoresearch").joinpath("read_approved.ts")
     write_ext = files("autoresearch").joinpath("write_candidate.ts")
     assert read_ext.is_file(), f"missing shipped tool: {read_ext}"
@@ -85,9 +85,9 @@ def improve(prompt: str, model: str, nodes_dir: Path) -> bytes:
         "--tools",
         "read_approved,read,write_candidate,write",
         "--no-mcp",
-        "--model",
-        model,
     ]
+    if model is not None:
+        cmd += ["--model", model]
     fd, tmp = tempfile.mkstemp(dir=nodes_dir, prefix=".candidate-")
     os.close(fd)
     candidate = Path(tmp)
@@ -110,7 +110,7 @@ def improve(prompt: str, model: str, nodes_dir: Path) -> bytes:
 def iterate(
     conn: sqlite3.Connection,
     workdir: Path,
-    model: str,
+    model: "str | None",
     rng: random.Random,
     read_paths: list[str] | None = None,
 ) -> None:
@@ -161,7 +161,7 @@ def ensure_seed(
 def generate(
     conn: sqlite3.Connection,
     workdir: Path,
-    model: str,
+    model: "str | None",
     rng: random.Random,
     max_rewrites: int,
     read_paths: list[str] | None = None,
@@ -202,7 +202,7 @@ def evaluate(
 
 def generator(
     workdir: str,
-    model: str,
+    model: "str | None",
     seed: int,
     max_rewrites: int,
     read_paths: list[str] | None = None,

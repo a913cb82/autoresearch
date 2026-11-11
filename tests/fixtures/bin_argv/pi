@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""Write the pi argv to the candidate file (lets tests inspect argv)."""
+
+import os
+import sys
+from pathlib import Path
+
+Path(os.environ["AUTORESEARCH_CANDIDATE"]).write_text(" ".join(sys.argv[1:]))
+sys.stdout.write("JUNK_STDOUT_SHOULD_BE_IGNORED\n")

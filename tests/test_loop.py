@@ -264,6 +264,23 @@ class TestLoop(unittest.TestCase):
                     random.Random(0),
                 )
 
+    def _argv_blob(self, model: "str | None") -> bytes:
+        work = Path(self.tmp.name) / f"wargv{model or 'none'}"
+        conn = db.connect(str(work))
+        with fixture_pi("argv"):
+            loop.ensure_seed(conn, work, b"x", EVAL)
+            loop.iterate(conn, work, model, random.Random(0))
+        rows = db.all_rows(conn)
+        blob = (work / "nodes" / str(rows[-1]["sha"])).read_bytes()
+        conn.close()
+        return blob
+
+    def test_improve_omits_model_when_unspecified(self) -> None:
+        self.assertNotIn(b"--model", self._argv_blob(None))
+
+    def test_improve_passes_model_when_specified(self) -> None:
+        self.assertIn(b"--model m", self._argv_blob("m"))
+
     def test_improve_failure_raises(self) -> None:
         loop.ensure_seed(self.conn, self.work, b"x", EVAL)
         with fixture_pi("fail"):

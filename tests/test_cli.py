@@ -111,11 +111,11 @@ class TestCli(unittest.TestCase):
         seen = Path(self.work) / "nodes" / "env_seen"
         self.assertEqual(seen.read_text(), "0")
 
-    def test_model_required(self) -> None:
+    def test_model_optional(self) -> None:
         args = list(self.base)
         del args[args.index("--model") : args.index("--model") + 2]
-        with self.assertRaises(SystemExit):
-            cli.main(args)
+        with fixture_pi("grow"):
+            self.assertEqual(cli.main(args), 0)
 
     def test_seed_defaults(self) -> None:
         args = list(self.base)

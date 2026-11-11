@@ -72,7 +72,8 @@ call `prompts/improve.render()` (plain-Python template: parent block
 omitted for roots, reference section omitted without `--read-paths`;
 values are never parsed, so braces/dollars in code can't collide),
 pipe via stdin to
-`pi --print` (on PATH) with `--model` verbatim; the agent saves the
+`pi --print` (on PATH), with `--model` verbatim when given (else pi's
+default); the agent saves the
 new file with the `write_candidate` tool and stdout is ignored.
 Two static, checked-in gates (shipped in the package, found via
 `importlib.resources`): `read_approved.ts` in front of pi's own
@@ -95,7 +96,7 @@ poison the tree.
 
 Flags: `--working-dir/--initial/--evaluate/--seed/--max-rewrites`
 (`--initial/--evaluate` optional on resume, required fresh).
-plus `--model` (forwarded to `pi --print`), plus repeatable
+plus optional `--model` (forwarded to `pi --print`), plus repeatable
 `--read-paths`. `expand_read_paths(entries)`: each entry a file, a
 dir (recursive files), or a quoted glob (`Path.glob`, `**`
 supported); relative entries resolve from invocation cwd; output

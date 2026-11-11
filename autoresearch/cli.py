@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def _generator_main(
     workdir: str,
-    model: str,
+    model: "str | None",
     seed: int,
     max_rewrites: int,
     read_paths: list[str],
@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evaluate", default=None)
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--max-rewrites", required=True, type=int)
-    parser.add_argument("--model", required=True)
+    parser.add_argument("--model", default=None)
     parser.add_argument("--generators", default=1, type=int)
     parser.add_argument("--evaluators", default=1, type=int)
     parser.add_argument("--read-paths", action="append", default=[])
