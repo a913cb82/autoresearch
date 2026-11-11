@@ -96,6 +96,19 @@ class TestSelect(unittest.TestCase):
         got = select.select(random.Random(0), db.all_rows(conn), _mean_sampler)
         self.assertEqual(got, ids[0])
 
+    def test_deep_chain_selects_without_recursion_error(self) -> None:
+        conn = db.connect(":memory:")
+        parent = None
+        ids = []
+        for i in range(3000):
+            node_id, _ = db.add_node(conn, self.nodes, parent, f"code-{i}".encode())
+            db.record_score(conn, node_id, float(i))
+            ids.append(node_id)
+            parent = node_id
+        pick = select.select(random.Random(0), db.all_rows(conn))
+        self.assertIn(pick, ids)
+        conn.close()
+
     def test_thompson_explores_both_lines(self) -> None:
         conn, ids = self._tree(
             [

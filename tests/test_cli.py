@@ -79,6 +79,12 @@ class TestCli(unittest.TestCase):
         self.assertEqual(db.meta_get(conn, "round"), "3")
         conn.close()
 
+    def test_negative_max_rewrites_aborts(self) -> None:
+        args = list(self.base)
+        args[args.index("--max-rewrites") + 1] = "-1"
+        with self.assertRaises(SystemExit):
+            cli.main(args)
+
     def test_split_zero_rejected(self) -> None:
         with self.assertRaises(SystemExit):
             cli.main(self._split_base("2", "0", "1"))

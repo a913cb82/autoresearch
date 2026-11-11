@@ -62,29 +62,24 @@ def select(
     if spread is None:
         top = max(scored, key=lambda r: (float(r["score"]), -int(r["id"])))
         return int(top["id"])
+    # Single bottom-up pass: child ids always exceed parent ids, so
+    # descending id order computes children before parents. (This also
+    # replaces the old recursion, which blew the stack on long chains.)
     draws: dict[int, float] = {}
     potentials: dict[int, float] = {}
-
-    def potential(node_id: int) -> float:
-        if node_id in potentials:
-            return potentials[node_id]
+    for r in reversed(scored):
+        node_id = int(r["id"])
         node = by_id[node_id]
         child_ids = kids.get(node_id, [])
         child_scores = [float(by_id[c]["score"]) for c in child_ids]
         mu, sigma, nu = posterior(float(node["score"]), child_scores, spread)
         x = sampler(rng, mu, sigma * math.sqrt(1 + 1 / (1 + len(child_ids))), nu)
+        draws[node_id] = x
         best = float(node["score"])
         for c in child_ids:
-            child_v = potential(c)
-            if child_v > best:
-                best = child_v
-        value = x if x > best else best
-        draws[node_id] = x
-        potentials[node_id] = value
-        return value
-
-    for r in scored:
-        potential(int(r["id"]))
+            if potentials[c] > best:
+                best = potentials[c]
+        potentials[node_id] = x if x > best else best
     roots = [r for r in scored if r["parent"] is None]
     node = max(roots, key=lambda r: (potentials[int(r["id"])], -int(r["id"])))
     while True:

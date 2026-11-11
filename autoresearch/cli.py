@@ -47,6 +47,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--generators must be >= 1")
     if args.evaluators < 1:
         parser.error("--evaluators must be >= 1")
+    if args.max_rewrites < 0:
+        parser.error("--max-rewrites must be >= 0")
     workdir = Path(args.working_dir)
     conn = db.connect(workdir)
     fresh = not db.all_rows(conn)
