@@ -109,6 +109,36 @@ class TestSelect(unittest.TestCase):
         self.assertIn(pick, ids)
         conn.close()
 
+    def test_settled_node_cools_to_point_mass(self) -> None:
+        conn, ids = self._tree(
+            [
+                (None, 0.0, b"R"),
+                (0, 50.0, b"M"),
+                (1, 50.0, b"M1"),
+                (1, 50.0, b"M2"),
+                (0, 60.0, b"G"),
+                (4, 60.0, b"G1"),
+            ]
+        )
+        rows = db.all_rows(conn)
+        seen: list[tuple[float, float, int]] = []
+
+        def rec(rng, mu, scale, nu):
+            seen.append((mu, scale, nu))
+            return mu
+
+        select.select(random.Random(0), rows, rec)
+        by_mu: dict[float, list[float]] = {}
+        for mu, scale, _ in seen:
+            by_mu.setdefault(mu, []).append(scale)
+        # M's two flat direct children settle it: point mass, no tails.
+        self.assertIn(0.0, by_mu[50.0])
+        # Prior center is the node's own score.
+        self.assertAlmostEqual(min(mu for mu, _, _ in seen), 36.666666666666664)
+        # Everything else keeps tails (young nodes stay hot).
+        self.assertTrue(all(s > 0.0 for s in by_mu[60.0]))
+        conn.close()
+
     def test_thompson_explores_both_lines(self) -> None:
         conn, ids = self._tree(
             [

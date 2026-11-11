@@ -44,16 +44,17 @@ Pure functions, no I/O. Candidates = scored nodes only (NULL rows are
 invisible). Seeded RNG in, one node id out.
 
 - `sigma0(rows)`: 0 gains ⇒ `None`; 1 gain ⇒ `g²`; ≥2 ⇒
-  `statistics.pvariance`. Returns the variance `σ₀²`. Zero spread
+  `statistics.pvariance`. Global fallback pool. Zero spread
   allowed (point mass).
+- per-node temperature: `τ_n²` is `statistics.pvariance` of direct
+  child gains (≥2 children), else the global pool.
 - `posterior(node, children, variance)`: `(μ, σ, ν)` per README.
 - `sample_X(rng, μ, scale, nu)`: caller precomputes
   `scale = σ√(1+1/(1+k))`; chi-square via
   `random.gammavariate(nu/2, 2.0)`.
-- `select(rng, rows, sampler=sample_X) -> id`: bottom-up V sample,
-  descend from root (`x_n > max child v` ⇒ expand `n`, else step to
-  best child). No-gains ⇒ best score, lowest id. Ties break by lower
-  id.
+- `select(rng, rows, sampler=sample_X) -> id`: one `X` draw per scored
+  node, expand argmax. No-gains ⇒ best score, lowest id. Ties break
+  by lower id.
 
 Tests (`test_select.py`, fixed tiny trees, hand-computed μ/σ): posterior
 asserted directly, σ₀ variance units, fixed draws injected; cold-start

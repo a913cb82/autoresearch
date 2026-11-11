@@ -54,34 +54,28 @@ rewrite, and insert unscored rows; evaluators score them.
 For node `n` with score `s_n` and children `c_1…k` scoring `s_1…s_k`:
 
 **Priors** (direct children):
-- `σ₀²` is the variance of all `child − parent` gains.
-- `σ²_n ~ InvGamma(1, σ₀²)`: 2 observations at `σ₀²`.
+- `σ²_n ~ InvGamma(1, τ_n²)`: 2 observations at `τ_n²`.
+- `τ_n²` is the variance of `n`'s child gains (fewer than two ⇒ `σ₀²`, the variance over all gains).
 - `θ_n | σ²_n ~ N(s_n, σ²_n)`: 1 observation at `s_n`.
 - Likelihood: each observed child score `s_i ~ N(θ_n, σ²_n)`.
 
 **Posterior** (exact):
 - `μ = (s_n + Σs_i)/(1+k)`
-- `(2+k)σ² = 2σ₀² + Σ(sᵢ−x̄)² + k(x̄−s_n)²/(1+k)` (`x̄` = mean of child scores, `s_n` when childless)
+- `(2+k)σ² = 2τ_n² + Σ(sᵢ−x̄)² + k(x̄−s_n)²/(1+k)` (`x̄` = mean of child scores, `s_n` when childless)
 - `X_n ~ Student-t(2+k, μ, σ√(1+1/(1+k)))`
 - `X_n` predicts the score of the next child of `n`
 
-**Potential** (bottom-up, leaves first):
-- `B_n` is the best scored node at/below `n`
-- `V_n = max(B_n, X_n, max child V)`
-- `V_n` is the best score reachable in `n`'s subtree
-- Unscored rows are ignored.
-
 **Decide** (Thompson sampling; one seeded draw per node per round):
-1. Sample every `V_n`: draw each `X_n`, max with `B_n`, child samples.
-2. Walk from root: expand `n` when `X_n > max child V`; else step to
-   the best child. Ties break by lower id.
+1. Draw each `X_n` once.
+2. Expand the node with the highest draw. Ties break by lower id.
+- Unscored rows are ignored.
 
 **Behavior** (selection frequency over rounds; one draw fluctuates):
 - No children: selected by score on average; tails add exploration
   (once gains exist; before that, best score wins).
-- Flat children: tight spread samples low every draw ⇒ rarely selected.
-- Improving child: high mean, broad spread ⇒ often selected.
-- Several live shots: more draws per round ⇒ higher max ⇒ selected more.
+- Flat children: tight local temperature samples low ⇒ rarely selected.
+- Improving child: high mean, broad local spread ⇒ often selected.
+- Large subtrees get no extra weight: one node, one draw.
 
 ## Storage
 

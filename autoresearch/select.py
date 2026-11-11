@@ -1,4 +1,4 @@
-"""Thompson-on-V selection over scored rows. Pure functions, no I/O."""
+"""Thompson sampling over scored rows. Pure functions, no I/O."""
 
 import math
 import random
@@ -58,35 +58,25 @@ def select(
                 f"scored node {int(r['id'])} has unscored parent"
             )
             kids.setdefault(int(parent), []).append(int(r["id"]))
-    spread = sigma0(rows)
-    if spread is None:
+    global_spread = sigma0(rows)
+    if global_spread is None:
         top = max(scored, key=lambda r: (float(r["score"]), -int(r["id"])))
         return int(top["id"])
-    # Single bottom-up pass: child ids always exceed parent ids, so
-    # descending id order computes children before parents. (This also
-    # replaces the old recursion, which blew the stack on long chains.)
+    # One draw per scored node; expand the highest. One node, one draw:
+    # subtree size buys no extra weight.
     draws: dict[int, float] = {}
-    potentials: dict[int, float] = {}
     for r in reversed(scored):
         node_id = int(r["id"])
         node = by_id[node_id]
+        score = float(node["score"])
         child_ids = kids.get(node_id, [])
         child_scores = [float(by_id[c]["score"]) for c in child_ids]
-        mu, sigma, nu = posterior(float(node["score"]), child_scores, spread)
-        x = sampler(rng, mu, sigma * math.sqrt(1 + 1 / (1 + len(child_ids))), nu)
-        draws[node_id] = x
-        best = float(node["score"])
-        for c in child_ids:
-            if potentials[c] > best:
-                best = potentials[c]
-        potentials[node_id] = x if x > best else best
-    roots = [r for r in scored if r["parent"] is None]
-    node = max(roots, key=lambda r: (potentials[int(r["id"])], -int(r["id"])))
-    while True:
-        child_ids = kids.get(int(node["id"]), [])
-        if not child_ids:
-            return int(node["id"])
-        top = max(child_ids, key=lambda c: (potentials[c], -c))
-        if draws[int(node["id"])] > potentials[top]:
-            return int(node["id"])
-        node = by_id[top]
+        if len(child_ids) >= 2:
+            spread = statistics.pvariance(s - score for s in child_scores)
+        else:
+            spread = global_spread
+        mu, sigma, nu = posterior(score, child_scores, spread)
+        draws[node_id] = sampler(
+            rng, mu, sigma * math.sqrt(1 + 1 / (1 + len(child_ids))), nu
+        )
+    return max(draws, key=lambda node_id: (draws[node_id], -node_id))
