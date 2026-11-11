@@ -1,6 +1,7 @@
 import random
 import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -100,9 +101,11 @@ class TestLoop(unittest.TestCase):
         with fixture_pi("grow"):
             loop.ensure_seed(conn, work, b"x", EVAL)
             loop.generate(conn, work, "m", random.Random(0), 1)
+            done = threading.Event()
+            done.set()
             with self.assertLogs("autoresearch.loop", level="INFO") as logs:
-                loop.evaluate(conn, work, EVAL, 1)
-        self.assertTrue(any("[1/1] best 4.0 (node 2)" in line for line in logs.output))
+                loop.evaluate(conn, work, EVAL, done.is_set)
+        self.assertTrue(any("best 4.0 (node 2)" in line for line in logs.output))
         conn.close()
 
     def test_evaluate_logs_only_new_best(self) -> None:
@@ -111,11 +114,13 @@ class TestLoop(unittest.TestCase):
         with fixture_pi("const"):
             loop.ensure_seed(conn, work, b"x", EVAL)
             loop.generate(conn, work, "m", random.Random(0), 3)
+            done = threading.Event()
+            done.set()
             with self.assertLogs("autoresearch.loop", level="INFO") as logs:
-                loop.evaluate(conn, work, EVAL, 3)
+                loop.evaluate(conn, work, EVAL, done.is_set)
         best_lines = [line for line in logs.output if "best" in line]
         self.assertEqual(len(best_lines), 1)
-        self.assertIn("[3/3] best", best_lines[0])
+        self.assertIn("best", best_lines[0])
         conn.close()
 
     def test_generate_inserts_unscored_and_spends(self) -> None:
@@ -136,31 +141,34 @@ class TestLoop(unittest.TestCase):
         with fixture_pi("grow"):
             loop.ensure_seed(conn, work, b"x", EVAL)
             loop.generate(conn, work, "m", random.Random(0), 1)
+            done = threading.Event()
+            done.set()
             with self.assertLogs("autoresearch.loop", level="INFO") as logs:
-                loop.evaluate(conn, work, EVAL, 1)
+                loop.evaluate(conn, work, EVAL, done.is_set)
         rows = db.all_rows(conn)
         self.assertTrue(all(r["score"] is not None for r in rows))
         self.assertEqual(db.meta_get(conn, "round"), "1")
         self.assertTrue(any("scored node" in line for line in logs.output))
         conn.close()
 
-    def test_evaluate_idle_exits_at_budget(self) -> None:
+    def test_evaluate_idle_exits_when_done(self) -> None:
         work = Path(self.tmp.name) / "widle"
         conn = db.connect(str(work))
         with fixture_pi("grow"):
             loop.ensure_seed(conn, work, b"x", EVAL)
-            db.spend_round(conn)
-            loop.evaluate(conn, work, EVAL, 1)
+            done = threading.Event()
+            done.set()
+            loop.evaluate(conn, work, EVAL, done.is_set)
         conn.close()
 
     def test_evaluator_waits_for_work(self) -> None:
-        import threading
         import time
 
         work = Path(self.tmp.name) / "wwait"
         conn = db.connect(str(work))
         with fixture_pi("grow"):
             loop.ensure_seed(conn, work, b"x", EVAL)
+            done = threading.Event()
 
             def late_gen() -> None:
                 time.sleep(1.2)
@@ -169,10 +177,11 @@ class TestLoop(unittest.TestCase):
                     loop.generate(c, work, "m", random.Random(0), 1)
                 finally:
                     c.close()
+                done.set()
 
             t = threading.Thread(target=late_gen)
             t.start()
-            loop.evaluate(conn, work, EVAL, 1)
+            loop.evaluate(conn, work, EVAL, done.is_set)
             t.join()
         rows = db.all_rows(conn)
         self.assertTrue(all(r["score"] is not None for r in rows))
@@ -211,7 +220,9 @@ class TestLoop(unittest.TestCase):
             loop.ensure_seed(conn, work, b"x", EVAL)
             rng = random.Random(0)
             loop.generate(conn, work, "m", rng, 1)
-            loop.evaluate(conn, work, EVAL, 1)
+            done = threading.Event()
+            done.set()
+            loop.evaluate(conn, work, EVAL, done.is_set)
             loop.generate(conn, work, "m", rng, 2)
         self.assertEqual(
             [(r["id"], r["parent"], r["score"]) for r in db.all_rows(conn)],

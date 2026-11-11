@@ -110,8 +110,9 @@ class TestDb(unittest.TestCase):
         self.assertEqual(db.meta_get(conn, "round"), "3")
         conn.close()
 
-    def test_record_score_round_history(self) -> None:
+    def test_record_score_leaves_round(self) -> None:
         node_id, _ = db.add_node(self.conn, self.nodes, None, b"a")
+        self.assertTrue(db.claim_round(self.conn, 5))
         db.record_score(self.conn, node_id, 0.5)
         row = db.all_rows(self.conn)[0]
         self.assertEqual(row["score"], 0.5)

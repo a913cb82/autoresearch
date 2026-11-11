@@ -86,14 +86,9 @@ def reset_scoring(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def record_score(
-    conn: sqlite3.Connection, node_id: int, score: float, count: bool = True
-) -> None:
+def record_score(conn: sqlite3.Connection, node_id: int, score: float) -> None:
     conn.execute("UPDATE nodes SET score=?, scoring=0 WHERE id=?", (score, node_id))
-    if count:
-        spend_round(conn)
-    else:
-        conn.commit()
+    conn.commit()
 
 
 def claim_round(conn: sqlite3.Connection, max_rewrites: int) -> bool:
@@ -105,14 +100,6 @@ def claim_round(conn: sqlite3.Connection, max_rewrites: int) -> bool:
     )
     conn.commit()
     return cur.rowcount == 1
-
-
-def spend_round(conn: sqlite3.Connection) -> None:
-    round_ = int(meta_get(conn, "round") or 0) + 1
-    conn.execute(
-        "INSERT OR REPLACE INTO meta(key, value) VALUES ('round', ?)", (str(round_),)
-    )
-    conn.commit()
 
 
 def get(conn: sqlite3.Connection, node_id: int) -> sqlite3.Row:

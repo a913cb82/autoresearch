@@ -22,15 +22,14 @@ CREATE TABLE meta(
 Functions: `add_node(parent, code: bytes) -> (id, is_new)` (tmp+rename +
 `INSERT OR IGNORE`; on sha hit, SELECT the existing id — `lastrowid` is
 stale on ignore),
-`record_score(id, score)` (UPDATE score + clear scoring + meta bump via
-`spend_round`, one txn), `spend_round()` (bare meta bump, also used for
-dropped duplicates), `reserve()` (atomic eval grab:
+`record_score(id, score)` (UPDATE score + clear scoring, one txn; rounds are
+claimed only at dispatch via `claim_round`), `reserve()` (atomic eval grab:
 `UPDATE … SET scoring=1 WHERE score IS NULL AND scoring=0 … RETURNING id`;
 needs SQLite 3.35+, asserted), `get(id)`, `best()` (highest score,
 lowest id), `all_rows()`. `connect()` ensures the scoring column
 (`ALTER TABLE`, old dirs).
 `node_path(nodes_dir, sha)` (extensionless).
-Dedup-hit ⇒ skip eval, spend one round; next pass re-picks.
+Dedup-hit ⇒ skip eval, burns its dispatch-claimed round; next pass re-picks.
 No claims: concurrent same-parent work just yields siblings (dedup
 absorbs identical code); kills leave NULL orphans the selector
 ignores, so no recovery exists.
@@ -115,19 +114,17 @@ at startup (previous owners gone) and takes `--generators G` /
 `--evaluators E` (default 1/1). Generator claims one round per pass (atomic at dispatch; dupe/crash
 burns it — round never exceeds max) → select (scores trail
 generation; staleness accepted) → improve → insert. Evaluator loop: reserve oldest NULL → evaluate →
-record (`count=False`) → exit when `round >= max` and no unmarked
-NULLs (recheck once; round hits max at dispatch so this can fire
-early — tail caught below), else sleep-poll 1s. Stuck markers are left for resume; FIFO
+record → exit when `generators_done` is set and no unmarked NULLs,
+else sleep-poll 1s. Stuck markers are left for resume; FIFO
 by id scores them first. `evaluate()` logs `scored node …` per score
-and `[round/max] best <score> (node <id>)` (INFO) only on improvement
+and `best <score> (node <id>)` (INFO) only on improvement
 (timestamps via `basicConfig`); generator/evaluator start INFO;
 nonzero exits WARNING. Improve/EVAL failure propagates loudly.
 Crashes abandon rows (NULL orphans stay invisible). Budget claimed
 from `meta` (seed setup excluded; shared across processes; atomic so
 concurrent claims never exceed max).
-Exit at budget plus drain: CLI joins generators (no rewrites in
-progress — every pass landed), joins evaluators, then drains any tail
-itself. Terminate + return 1 on generator failure; leftovers for
+Exit: CLI joins generators, sets `generators_done` (every claimed round
+has landed), joins evaluators. Terminate + return 1 on generator failure; leftovers for
 resume. Generators (`seed + i`) and evaluators spawn
 as separate processes; nonzero exits fail loudly.
 
@@ -142,14 +139,14 @@ file passthrough with stdout ignored (missing write ⇒ `FileNotFoundError`),
 5-round run (reaches selection past the 2-gain bootstrap),
 budgets stop, const-`pi` burns budget on dupes and ends at budget,
 plus read-paths expansion/argv/prompt tests, plus split-role
-(generator inserts NULL, evaluator scores, drain exits) tests.
+(generator inserts NULL, evaluator scores and exits on done) tests.
 
 ## 4. Smoke
 
 Fake-eval CLI run (byte-length, covered by `test_cli.py`): tree grows,
 scores recorded, `read.py` prints best. Read-paths run: session log
 shows `read_approved` calls and denials. TSP split-role smoke
-(G=4, E=1): scores trail generation, drain completes.
+(G=4, E=1): scores trail generation, evaluators exit on done.
 No example game.
 
 ## Deferred

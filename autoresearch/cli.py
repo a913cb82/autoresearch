@@ -4,6 +4,7 @@ import argparse
 import logging
 import multiprocessing
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 from autoresearch import db, loop
@@ -21,8 +22,10 @@ def _generator_main(
     loop.generator(workdir, model, seed, max_rewrites, read_paths)
 
 
-def _evaluator_main(workdir: str, eval_exe: str, max_rewrites: int) -> None:
-    loop.evaluator(workdir, eval_exe, max_rewrites)
+def _evaluator_main(
+    workdir: str, eval_exe: str, generators_done: Callable[[], bool]
+) -> None:
+    loop.evaluator(workdir, eval_exe, generators_done)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -66,8 +69,6 @@ def main(argv: list[str] | None = None) -> int:
         if stored is not None and eval_exe != stored:
             raise SystemExit("--evaluate differs from the stored run")
     loop.ensure_seed(conn, workdir, seed, eval_exe)
-    if stored is None:
-        db.meta_set(conn, "evaluate", eval_exe)
     try:
         read_paths = loop.expand_read_paths(args.read_paths)
     except (FileNotFoundError, ValueError) as e:
@@ -79,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     db.reset_scoring(conn)
     conn.close()
     ctx = multiprocessing.get_context()
+    done = ctx.Event()
     gen_procs = [
         ctx.Process(
             target=_generator_main,
@@ -95,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     eval_procs = [
         ctx.Process(
             target=_evaluator_main,
-            args=(str(workdir), eval_exe, args.max_rewrites),
+            args=(str(workdir), eval_exe, done.is_set),
         )
         for _ in range(args.evaluators)
     ]
@@ -113,17 +115,13 @@ def main(argv: list[str] | None = None) -> int:
             [p.exitcode for p in gen_procs + eval_procs],
         )
         return 1
+    # Generators are joined: every claimed round has landed, so evaluators
+    # exit on their own once the reserve runs dry.
+    done.set()
     for p in eval_procs:
         p.join()
     codes = [p.exitcode for p in eval_procs]
     if any(c != 0 for c in codes):
         logger.warning("worker exit codes: %s", codes)
         return 1
-    # Evaluators may exit before the last inserts land (round hits max at
-    # dispatch); drain the tail here, after all workers are joined.
-    conn = db.connect(str(workdir))
-    try:
-        loop.evaluate(conn, workdir, eval_exe, args.max_rewrites)
-    finally:
-        conn.close()
     return 0

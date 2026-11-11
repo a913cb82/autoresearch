@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import tempfile
 import time
+from collections.abc import Callable
 from importlib.resources import files
 from pathlib import Path
 
@@ -106,10 +107,6 @@ def improve(prompt: str, model: str, nodes_dir: Path) -> bytes:
         candidate.unlink(missing_ok=True)
 
 
-def _scores(value: float | None) -> str:
-    return "?" if value is None else str(value)
-
-
 def iterate(
     conn: sqlite3.Connection,
     workdir: Path,
@@ -129,7 +126,7 @@ def iterate(
         parent = db.get(conn, int(node["parent"]))
         blob = db.node_path(nodes_dir, str(parent["sha"])).read_bytes()
         parent_code = blob.decode("utf-8")
-        parent_score = _scores(parent["score"])
+        parent_score = str(parent["score"])
     prompt = render(
         parent_code=parent_code,
         parent_score=parent_score,
@@ -148,18 +145,16 @@ def ensure_seed(
     roots = [r for r in db.all_rows(conn) if r["parent"] is None]
     if any(str(r["sha"]) != sha for r in roots):
         raise SystemExit("working dir seed differs from --initial")
-    hit = [r for r in roots if r["sha"] == sha and r["score"] is not None]
-    if hit:
-        return int(hit[0]["id"])
-    same = [r for r in roots if r["sha"] == sha]
-    if same:
-        target = int(same[0]["id"])
+    db.meta_set(conn, "evaluate", eval_exe)
+    if roots:
+        target = int(roots[0]["id"])
+        if roots[0]["score"] is not None:
+            return target
     else:
-        assert not roots
         target, _ = db.add_node(conn, workdir / "nodes", None, seed)
         assert target == 1
     score = run_eval(eval_exe, db.node_path(workdir / "nodes", sha))
-    db.record_score(conn, target, score, count=False)
+    db.record_score(conn, target, score)
     return target
 
 
@@ -176,7 +171,10 @@ def generate(
 
 
 def evaluate(
-    conn: sqlite3.Connection, workdir: Path, eval_exe: str, max_rewrites: int
+    conn: sqlite3.Connection,
+    workdir: Path,
+    eval_exe: str,
+    generators_done: Callable[[], bool],
 ) -> None:
     nodes_dir = workdir / "nodes"
     best_row = db.best(conn)
@@ -185,29 +183,21 @@ def evaluate(
     while True:
         row = db.reserve(conn)
         if row is None:
-            if int(db.meta_get(conn, "round") or 0) >= max_rewrites:
-                # Round hits max at last dispatch (passes still in flight);
-                # the tail is drained by the parent after joining.
-                if db.reserve(conn) is None:
-                    return
-            else:
-                time.sleep(1)
+            # Generators are joined before done is set, so every claimed
+            # round has landed: an empty reserve now means truly no work.
+            if generators_done():
+                return
+            time.sleep(1)
             continue
         node_id = int(row["id"])
         score = run_eval(eval_exe, db.node_path(nodes_dir, str(row["sha"])))
-        db.record_score(conn, node_id, score, count=False)
+        db.record_score(conn, node_id, score)
         logger.info("scored node %s: %s", node_id, score)
         best_row = db.best(conn)
         assert best_row is not None
         if score > last_best and int(best_row["id"]) == node_id:
             last_best = score
-            logger.info(
-                "[%s/%s] best %s (node %s)",
-                db.meta_get(conn, "round"),
-                max_rewrites,
-                score,
-                node_id,
-            )
+            logger.info("best %s (node %s)", score, node_id)
 
 
 def generator(
@@ -232,10 +222,10 @@ def generator(
         conn.close()
 
 
-def evaluator(workdir: str, eval_exe: str, max_rewrites: int) -> None:
+def evaluator(workdir: str, eval_exe: str, generators_done: Callable[[], bool]) -> None:
     logger.info("evaluator start")
     conn = db.connect(workdir)
     try:
-        evaluate(conn, Path(workdir), eval_exe, max_rewrites)
+        evaluate(conn, Path(workdir), eval_exe, generators_done)
     finally:
         conn.close()
